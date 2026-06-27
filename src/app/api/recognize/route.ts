@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recognizeDish } from "@/lib/gemini";
-import { uploadImage } from "@/lib/cloudinary";
+import { uploadImage } from "@/lib/blob";
 
 export async function POST(request: NextRequest) {
   try {
