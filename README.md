@@ -16,6 +16,12 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Testing safety
+
+`npm test` only runs unit and configuration tests. It does not call the local API and cannot write to the Turso production database or Vercel Blob.
+
+The existing files under `tests/api/` are retained for a future isolated test database. Do not run them against the normal development server. `npm run test:api` is intentionally blocked until a separate test server and database are configured.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

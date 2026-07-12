@@ -1,8 +1,10 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import { Dish } from "@/lib/types";
 import Image from "next/image";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
 import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
+import { HOME_DISH_BATCH_SIZE, nextVisibleDishCount } from "@/lib/home-pagination";
 
 function getCatLabel(catId: number | null) {
   if (catId === null) return "";
@@ -13,7 +15,25 @@ function getCatLabel(catId: number | null) {
 export default function RecordPage({
   dishes, onDishClick, onAddClick,
 }: { dishes: Dish[]; onDishClick: (d: Dish) => void; onAddClick: () => void }) {
-  const recent = [...dishes].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6);
+  const [visibleCount, setVisibleCount] = useState(HOME_DISH_BATCH_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const recent = [...dishes].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const visibleDishes = recent.slice(0, visibleCount);
+  const hasMore = visibleCount < recent.length;
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore) return;
+    if (!("IntersectionObserver" in window)) {
+      queueMicrotask(() => setVisibleCount(dishes.length));
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setVisibleCount((current) => nextVisibleDishCount(current, dishes.length));
+    }, { rootMargin: "160px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [dishes.length, hasMore]);
 
   return (
     <div className={PAGE_CONTENT_CLASS}>
@@ -49,7 +69,7 @@ export default function RecordPage({
           <p className="text-gray-400 text-center py-10 text-sm">还没有记录菜品，快去拍第一张吧 📸</p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {recent.map((d) => (
+            {visibleDishes.map((d) => (
               <button key={d.id} onClick={() => onDishClick(d)}
                 className="bg-white rounded-2xl border border-gray-100 overflow-hidden text-left transition active:scale-[.97]">
                 <div className="h-28 bg-gray-50 flex items-center justify-center text-5xl relative">
@@ -64,6 +84,11 @@ export default function RecordPage({
               </button>
             ))}
           </div>
+        )}
+        {recent.length > 0 && (
+          hasMore
+            ? <div ref={loadMoreRef} className="py-6 text-center text-xs text-gray-400">继续下滑加载更多...</div>
+            : <div className="py-6 text-center text-xs text-gray-300">已经到底了 · 共 {recent.length} 道菜</div>
         )}
       </div>
     </div>

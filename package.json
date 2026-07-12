@@ -7,8 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run tests/lib tests/config",
+    "test:watch": "vitest tests/lib tests/config",
+    "test:api": "node -e \"console.error('API tests are blocked until an isolated test database and test server are configured.'); process.exit(1)\"",
     "seed": "npx tsx src/db/seed.ts"
   },
   "dependencies": {
