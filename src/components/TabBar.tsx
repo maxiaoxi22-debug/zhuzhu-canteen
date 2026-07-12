@@ -47,7 +47,7 @@ const TABS: { key: Tab; label: string; icon: ReactNode }[] = [
 export default function TabBar({ active, onTabChange }: { active: Tab; onTabChange: (t: Tab) => void }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-20">
-      <div className="max-w-[430px] mx-auto flex justify-around py-1.5 pb-5">
+      <div className="max-w-[430px] mx-auto flex justify-around pt-1.5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         {TABS.map((t) => (
           <button
             key={t.key}

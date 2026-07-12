@@ -20,6 +20,15 @@ export interface MealPlan {
   dish?: Dish | null;
 }
 
+export interface HistoryEvent {
+  id: string;
+  type: "dish_created" | "meal_planned";
+  eventTime: string;
+  date: string;
+  mealType?: string;
+  dish: Dish;
+}
+
 export interface Category {
   id: number;
   name: string;

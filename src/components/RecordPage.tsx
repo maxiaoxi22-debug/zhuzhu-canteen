@@ -1,5 +1,8 @@
 "use client";
-import { Dish, CATEGORIES } from "@/lib/types";
+import { Dish } from "@/lib/types";
+import Image from "next/image";
+import { PAGE_CONTENT_CLASS } from "@/lib/layout";
+import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
 
 function getCatLabel(catId: number | null) {
   if (catId === null) return "";
@@ -13,7 +16,7 @@ export default function RecordPage({
   const recent = [...dishes].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6);
 
   return (
-    <div className="px-5 pt-12 pb-4">
+    <div className={PAGE_CONTENT_CLASS}>
       <h1 className="text-2xl font-bold text-gray-900">猪猪食堂</h1>
       <p className="text-gray-400 text-sm mt-0.5">记录家里会做的每一道菜</p>
 
@@ -49,8 +52,8 @@ export default function RecordPage({
             {recent.map((d) => (
               <button key={d.id} onClick={() => onDishClick(d)}
                 className="bg-white rounded-2xl border border-gray-100 overflow-hidden text-left transition active:scale-[.97]">
-                <div className="h-28 bg-gray-50 flex items-center justify-center text-5xl">
-                  {d.imageUrl ? <img src={d.imageUrl} alt={d.name} className="w-full h-full object-cover" /> : "🍽️"}
+                <div className="h-28 bg-gray-50 flex items-center justify-center text-5xl relative">
+                  {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="(max-width: 640px) 45vw, 320px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
                 </div>
                 <div className="p-3">
                   <p className="text-sm font-semibold text-gray-800 truncate">{d.name}</p>

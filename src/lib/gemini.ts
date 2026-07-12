@@ -29,3 +29,10 @@ export async function recognizeDish(imageBase64: string, mimeType: string) {
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   return JSON.parse(cleaned);
 }
+
+export async function generateRecipeFromName(name: string) {
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const result = await model.generateContent(`请根据中餐菜名“${name}”生成参考菜谱。只返回 JSON：{"name":"菜名","category":"肉类/青菜/主食/海鲜/汤类/其他","ingredients":["食材和用量"],"steps":["步骤"]}`);
+  const cleaned = result.response.text().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  return JSON.parse(cleaned);
+}

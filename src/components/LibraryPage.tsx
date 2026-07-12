@@ -1,6 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Dish, CATEGORIES } from "@/lib/types";
+import Image from "next/image";
+import { PAGE_CONTENT_CLASS } from "@/lib/layout";
+import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
 
 function getCatLabel(catId: number | null) {
   if (catId === null) return "";
@@ -21,7 +24,7 @@ export default function LibraryPage({
   });
 
   return (
-    <div className="px-5 pt-12 pb-4">
+    <div className={PAGE_CONTENT_CLASS}>
       <h1 className="text-2xl font-bold text-gray-900">菜单库</h1>
       <p className="text-gray-400 text-sm mt-0.5">{dishes.length} 道菜，按分类浏览</p>
 
@@ -52,8 +55,8 @@ export default function LibraryPage({
           filtered.map((d) => (
             <button key={d.id} onClick={() => onDishClick(d)}
               className="w-full bg-white rounded-2xl border border-gray-100 p-3 flex gap-3 text-left transition active:scale-[.98]">
-              <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
-                {d.imageUrl ? <img src={d.imageUrl} alt={d.name} className="w-full h-full rounded-xl object-cover" /> : "🍽️"}
+              <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 relative overflow-hidden">
+                {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="64px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-800 text-sm">{d.name}</p>

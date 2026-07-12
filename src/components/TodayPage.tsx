@@ -1,6 +1,10 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback } from "react";
 import { Dish, CATEGORIES, MEAL_TYPES, MealPlan } from "@/lib/types";
+import Image from "next/image";
+import { PAGE_CONTENT_CLASS } from "@/lib/layout";
+import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
 
 function getCatLabel(catId: number | null) {
   if (catId === null) return "";
@@ -14,6 +18,7 @@ export default function TodayPage({
   const [randCat, setRandCat] = useState("all");
   const [randDish, setRandDish] = useState<Dish | null>(null);
   const [todayPlans, setTodayPlans] = useState<MealPlan[]>([]);
+  const [adding, setAdding] = useState("");
 
   const pool = randCat === "all" ? dishes : dishes.filter((d) => getCatLabel(d.categoryId) === randCat);
 
@@ -22,7 +27,7 @@ export default function TodayPage({
     else setRandDish(null);
   }, [pool]);
 
-  useEffect(() => { randomize(); }, [randCat, dishes.length]);
+  useEffect(() => { randomize(); }, [randomize]);
 
   const fetchTodayPlans = async () => {
     const date = new Date().toISOString().slice(0, 10);
@@ -34,20 +39,32 @@ export default function TodayPage({
   useEffect(() => { fetchTodayPlans(); }, [dishes.length]);
 
   const addToPlan = async (dishId: string, mealType: string) => {
-    const date = new Date().toISOString().slice(0, 10);
-    await fetch("/api/plans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, mealType, dishId }),
-    });
-    fetchTodayPlans();
-    refresh();
+    setAdding(mealType);
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const res = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, mealType, dishId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "添加失败，请重试");
+        return;
+      }
+      fetchTodayPlans();
+      refresh();
+    } catch {
+      alert("网络错误，请重试");
+    } finally {
+      setAdding("");
+    }
   };
 
   const getDish = (id: string | null) => dishes.find((d) => d.id === id);
 
   return (
-    <div className="px-5 pt-12 pb-4">
+    <div className={PAGE_CONTENT_CLASS}>
       <h1 className="text-2xl font-bold text-gray-900">今天吃点啥</h1>
       <p className="text-gray-400 text-sm mt-0.5">选不出来？让菜库帮你决定</p>
 
@@ -69,7 +86,7 @@ export default function TodayPage({
         </div>
         {randDish ? (
           <button onClick={() => onDishClick(randDish)} className="bg-white rounded-2xl p-5 text-center w-full active:scale-[.98] transition">
-            <div className="text-5xl mb-2">{randDish.imageUrl ? <img src={randDish.imageUrl} alt="" className="w-16 h-16 mx-auto rounded-xl object-cover" /> : "🍽️"}</div>
+            <div className="text-5xl mb-2 w-16 h-16 mx-auto relative">{randDish.imageUrl ? <Image src={getDisplayImageSrc(randDish.imageUrl, process.env.NODE_ENV)} alt={randDish.name} fill sizes="64px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="rounded-xl object-cover" /> : "🍽️"}</div>
             <p className="text-lg font-bold text-gray-800">{randDish.name}</p>
             <p className="text-xs text-gray-400 mt-1">{getCatLabel(randDish.categoryId)} · 做过{randDish.timesCooked}次</p>
           </button>
@@ -84,10 +101,14 @@ export default function TodayPage({
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             换一道
           </button>
-          <button onClick={() => addToPlan(randDish!.id, "lunch")} disabled={!randDish}
-            className="flex-1 bg-green-500 text-white rounded-2xl py-3 text-sm font-semibold active:bg-green-600 transition disabled:opacity-40">
-            📅 加入今天
-          </button>
+        </div>
+        <div className="flex gap-2 mt-2">
+          {MEAL_TYPES.map((mt) => (
+            <button key={mt.key} onClick={() => addToPlan(randDish!.id, mt.key)} disabled={!randDish || adding !== ""}
+              className="flex-1 bg-green-500 text-white rounded-xl py-2.5 text-xs font-semibold active:bg-green-600 transition disabled:opacity-40">
+              {adding === mt.key ? "添加中..." : `${mt.emoji} ${mt.label}`}
+            </button>
+          ))}
         </div>
       </div>
 
