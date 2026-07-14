@@ -117,12 +117,11 @@ export default function RecordPage({
                   <div className="h-28 bg-gray-50 flex items-center justify-center text-5xl relative">
                     {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="(max-width: 640px) 45vw, 320px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
                   </div>
-                  <div className="p-3 pr-9">
+                  <div className="p-3">
                     <p className="text-sm font-semibold text-gray-800 truncate">{d.name}</p>
                     <p className="text-xs text-gray-400 mt-1">{getCatLabel(d.categoryId)} · {d.timesCooked}次</p>
                   </div>
                 </button>
-                <button aria-label={`${d.name}更多操作`} onClick={(event) => { event.stopPropagation(); setActionDishId((current) => current === d.id ? null : d.id); }} className="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full bg-white/90 text-gray-400 shadow-sm">···</button>
                 {actionDishId === d.id && <DishActionMenu dish={d} onEdit={(dish) => { setActionDishId(null); onEditDish(dish); }} onDelete={(dish) => { setActionDishId(null); onDeleteDish(dish); }} />}
               </div>
             ))}
