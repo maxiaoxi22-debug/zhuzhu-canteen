@@ -1,14 +1,14 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useState, useRef } from "react";
-import { CATEGORIES, Dish } from "@/lib/types";
-import { categoryIdFromKey, readDishSaveResult } from "@/lib/dish-form";
+import { useEffect, useState, useRef } from "react";
+import { CATEGORIES, Dish, DishDuplicateMatch } from "@/lib/types";
+import { categoryIdFromKey, DishSaveError, readDishSaveResult } from "@/lib/dish-form";
 import { compressImage } from "@/lib/image-compression";
 import { mergeRecipeFields, RecipeSuggestion } from "@/lib/recipe-fallback";
 
 export default function AddDishForm({
-  dish, onClose, onSaved,
-}: { dishes: Dish[]; dish?: Dish; onClose: () => void; onSaved: () => void }) {
+  dish, onClose, onSaved, onOpenExisting,
+}: { dishes: Dish[]; dish?: Dish; onClose: () => void; onSaved: () => void; onOpenExisting: (id: string, mode: "detail" | "edit") => void }) {
   const parseLines = (value: string): string => {
     try {
       const parsed: unknown = JSON.parse(value);
@@ -31,8 +31,35 @@ export default function AddDishForm({
   const [generating, setGenerating] = useState(false);
   const [generateMessage, setGenerateMessage] = useState("");
   const [categoryTouched, setCategoryTouched] = useState(false);
+  const [duplicateMatch, setDuplicateMatch] = useState<DishDuplicateMatch | null>(null);
+  const [duplicateChecking, setDuplicateChecking] = useState(false);
+  const [duplicateCheckError, setDuplicateCheckError] = useState("");
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const name = editName.trim();
+    if (!name) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setDuplicateChecking(true);
+      setDuplicateCheckError("");
+      try {
+        const query = new URLSearchParams({ name });
+        if (dish) query.set("excludeId", dish.id);
+        const response = await fetch(`/api/dishes/check-name?${query}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("查重失败");
+        const data = await response.json() as { match: DishDuplicateMatch | null };
+        setDuplicateMatch(data.match);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setDuplicateCheckError("暂时无法检查是否重复，保存时会再次校验");
+      } finally {
+        if (!controller.signal.aborted) setDuplicateChecking(false);
+      }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [editName, dish]);
 
   const handleFile = async (f: File) => {
     const optimized = await compressImage(f);
@@ -126,13 +153,14 @@ export default function AddDishForm({
       await readDishSaveResult(response);
       onSaved();
     } catch (error) {
+      if (error instanceof DishSaveError && error.match) setDuplicateMatch(error.match);
       setSaveError(error instanceof Error ? error.message : "保存失败，请重试");
     } finally {
       setSaving(false);
     }
   };
 
-  const canSave = Boolean(editName.trim() && (file || imageUrl));
+  const canSave = Boolean(editName.trim() && (file || imageUrl) && !duplicateMatch);
 
   return (
     <div className="fixed inset-0 z-30 flex items-end" style={{ background: "rgba(0,0,0,.35)" }} onClick={onClose}>
@@ -191,8 +219,19 @@ export default function AddDishForm({
             <div className="mt-4 space-y-3">
               <div>
                 <label className="text-xs text-gray-400 font-medium">菜品名称 *</label>
-                <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="例：红烧排骨"
+                <input value={editName} onChange={(e) => { setEditName(e.target.value); setDuplicateMatch(null); setDuplicateCheckError(""); }} placeholder="例：红烧排骨"
                   className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm mt-1 border border-gray-100 outline-none focus:ring-2 focus:ring-green-300" />
+                {duplicateChecking && <p className="text-xs text-gray-400 mt-2">正在检查菜单库...</p>}
+                {duplicateCheckError && <p className="text-xs text-amber-600 mt-2">{duplicateCheckError}</p>}
+                {duplicateMatch && (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-sm font-semibold text-amber-700">{duplicateMatch.message}：{duplicateMatch.name}</p>
+                    <div className="flex gap-2 mt-2">
+                      <button type="button" onClick={() => onOpenExisting(duplicateMatch.id, "detail")} className="flex-1 rounded-lg bg-white border border-amber-200 py-2 text-xs text-amber-700">查看已有菜品</button>
+                      <button type="button" onClick={() => onOpenExisting(duplicateMatch.id, "edit")} className="flex-1 rounded-lg bg-amber-500 py-2 text-xs text-white">编辑已有菜品</button>
+                    </div>
+                  </div>
+                )}
                 <button type="button" onClick={handleGenerateRecipe} disabled={!editName.trim() || generating}
                   className="w-full mt-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40">
                   {generating ? "正在生成..." : "✨ 根据菜名生成参考用料和做法"}

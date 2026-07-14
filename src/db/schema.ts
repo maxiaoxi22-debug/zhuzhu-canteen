@@ -10,6 +10,7 @@ export const categories = sqliteTable("categories", {
 export const dishes = sqliteTable("dishes", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  nameKey: text("name_key").unique(),
   categoryId: integer("category_id").references(() => categories.id),
   imageUrl: text("image_url"),
   ingredients: text("ingredients").notNull().default("[]"),

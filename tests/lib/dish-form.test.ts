@@ -28,4 +28,13 @@ describe("菜品表单数据处理", () => {
 
     await expect(readDishSaveResult(response)).resolves.toEqual({ id: "dish-1" });
   });
+
+  it("重复冲突时保留匹配菜品信息", async () => {
+    const match = { id: "1", name: "红烧肉", imageUrl: null, kind: "exact", message: "菜单库已有这道菜" };
+    const response = new Response(JSON.stringify({ error: match.message, match }), { status: 409 });
+    await expect(readDishSaveResult(response)).rejects.toMatchObject({
+      message: "菜单库已有这道菜",
+      match: { id: "1" },
+    });
+  });
 });

@@ -10,6 +10,19 @@ export interface Dish {
   updatedAt: string;
 }
 
+export type DishDuplicateKind = "exact" | "normalized" | "similar";
+
+export interface DishNameCandidate {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+}
+
+export interface DishDuplicateMatch extends DishNameCandidate {
+  kind: DishDuplicateKind;
+  message: string;
+}
+
 export interface MealPlan {
   id: number;
   date: string;

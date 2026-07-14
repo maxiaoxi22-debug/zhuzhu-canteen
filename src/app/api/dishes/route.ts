@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { dishes, mealPlans } from "@/db/schema";
+import { dishes } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import { findDishDuplicate } from "@/lib/dish-duplicate-server";
+import { normalizeDishName } from "@/lib/dish-name-match";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -29,12 +31,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "菜品名称不能为空" }, { status: 400 });
     }
 
+    const match = await findDishDuplicate(name.trim());
+    if (match) return NextResponse.json({ error: match.message, match }, { status: 409 });
+
     const id = uuidv4();
     const now = new Date().toISOString();
 
     await db.insert(dishes).values({
       id,
       name: name.trim(),
+      nameKey: normalizeDishName(name),
       categoryId: categoryId || null,
       imageUrl: imageUrl || null,
       ingredients: JSON.stringify(ingredients || []),
@@ -47,23 +53,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id });
   } catch (error: any) {
     console.error("POST /api/dishes error:", error);
+    if (String(error?.message || error).toLowerCase().includes("unique")) {
+      return NextResponse.json({ error: "菜单库已有这道菜" }, { status: 409 });
+    }
     return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-    // Delete related meal plans first
-    await db.delete(mealPlans).where(eq(mealPlans.dishId, id));
-    await db.delete(dishes).where(eq(dishes.id, id));
-
-    return NextResponse.json({ success: true });
-  } catch (e: any) {
-    console.error("DELETE /api/dishes error:", e);
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }

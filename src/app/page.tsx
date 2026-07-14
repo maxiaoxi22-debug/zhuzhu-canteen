@@ -8,6 +8,7 @@ import TodayPage from "@/components/TodayPage";
 import HistoryPage from "@/components/HistoryPage";
 import DishDetail from "@/components/DishDetail";
 import AddDishForm from "@/components/AddDishForm";
+import DeleteDishDialog from "@/components/DeleteDishDialog";
 import { Dish } from "@/lib/types";
 
 export type Tab = "record" | "library" | "today" | "history";
@@ -21,6 +22,10 @@ export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [dbReady, setDbReady] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Dish | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [toast, setToast] = useState("");
 
   const fetchDishes = useCallback(async () => {
     setLoadError("");
@@ -39,6 +44,37 @@ export default function Home() {
   useEffect(() => { fetchDishes(); }, [fetchDishes, refreshKey]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    const target = deleteTarget;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await fetch(`/api/dishes/${target.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "删除失败，请重试");
+      setDishes((current) => current.filter((dish) => dish.id !== target.id));
+      setDeleteTarget(null);
+      setSelectedDish(null);
+      setToast("已删除");
+      window.setTimeout(() => setToast(""), 1800);
+      await fetchDishes();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "删除失败，请重试");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openExisting = (id: string, mode: "detail" | "edit") => {
+    const existing = dishes.find((dish) => dish.id === id);
+    setShowAddForm(false);
+    setEditingDish(null);
+    if (!existing) { refresh(); return; }
+    if (mode === "edit") setEditingDish(existing);
+    else setSelectedDish(existing);
+  };
 
   if (!dbReady) {
     return <div className="min-h-screen bg-white flex items-center justify-center text-sm text-gray-400">正在读取菜单...</div>;
@@ -59,10 +95,10 @@ export default function Home() {
   return (
     <div className="bg-white min-h-screen">
       {tab === "record" && (
-        <RecordPage dishes={dishes} onDishClick={setSelectedDish} onAddClick={() => setShowAddForm(true)} />
+        <RecordPage dishes={dishes} onDishClick={setSelectedDish} onAddClick={() => setShowAddForm(true)} onEditDish={setEditingDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
       {tab === "library" && (
-        <LibraryPage dishes={dishes} onDishClick={setSelectedDish} />
+        <LibraryPage dishes={dishes} onDishClick={setSelectedDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
       {tab === "today" && (
         <TodayPage dishes={dishes} onDishClick={setSelectedDish} refresh={refresh} />
@@ -82,8 +118,11 @@ export default function Home() {
           dish={editingDish || undefined}
           onClose={() => { setShowAddForm(false); setEditingDish(null); }}
           onSaved={() => { setShowAddForm(false); setEditingDish(null); refresh(); }}
+          onOpenExisting={openExisting}
         />
       )}
+      {deleteTarget && <DeleteDishDialog dish={deleteTarget} deleting={deleting} error={deleteError} onCancel={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(""); } }} onConfirm={confirmDelete} />}
+      {toast && <div className="fixed left-1/2 top-6 z-[60] -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">{toast}</div>}
     </div>
   );
 }

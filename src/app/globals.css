@@ -20,3 +20,10 @@ body {
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+
+.dish-swipe-motion { transition: transform 180ms ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dish-card-motion,
+  .dish-swipe-motion { transition: none; }
+}

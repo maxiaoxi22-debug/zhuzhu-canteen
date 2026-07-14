@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dish, CATEGORIES } from "@/lib/types";
 import Image from "next/image";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
 import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
+import SwipeableDishRow from "./SwipeableDishRow";
 
 function getCatLabel(catId: number | null) {
   if (catId === null) return "";
@@ -12,10 +13,17 @@ function getCatLabel(catId: number | null) {
 }
 
 export default function LibraryPage({
-  dishes, onDishClick,
-}: { dishes: Dish[]; onDishClick: (d: Dish) => void }) {
+  dishes, onDishClick, onDeleteDish,
+}: { dishes: Dish[]; onDishClick: (d: Dish) => void; onDeleteDish: (d: Dish) => void }) {
   const [catFilter, setCatFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [openDishId, setOpenDishId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const close = () => setOpenDishId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
 
   const filtered = dishes.filter((d) => {
     if (catFilter !== "all" && getCatLabel(d.categoryId) !== catFilter) return false;
@@ -53,8 +61,8 @@ export default function LibraryPage({
           </p>
         ) : (
           filtered.map((d) => (
-            <button key={d.id} onClick={() => onDishClick(d)}
-              className="w-full bg-white rounded-2xl border border-gray-100 p-3 flex gap-3 text-left transition active:scale-[.98]">
+            <SwipeableDishRow key={d.id} dish={d} open={openDishId === d.id} onOpen={() => setOpenDishId(d.id)} onClose={() => setOpenDishId(null)} onClick={() => onDishClick(d)} onDelete={(dish) => { setOpenDishId(null); onDeleteDish(dish); }}>
+            <div className="w-full bg-white rounded-2xl border border-gray-100 p-3 flex gap-3 text-left transition active:scale-[.98]">
               <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 relative overflow-hidden">
                 {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="64px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
               </div>
@@ -70,7 +78,8 @@ export default function LibraryPage({
                 </div>
               </div>
               <div className="flex items-center text-gray-300">→</div>
-            </button>
+            </div>
+            </SwipeableDishRow>
           ))
         )}
       </div>

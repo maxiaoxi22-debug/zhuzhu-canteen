@@ -5,6 +5,8 @@ import Image from "next/image";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
 import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
 import { HOME_DISH_BATCH_SIZE, nextVisibleDishCount } from "@/lib/home-pagination";
+import { movedPastLongPressTolerance, Point } from "@/lib/dish-gestures";
+import DishActionMenu from "./DishActionMenu";
 
 function getCatLabel(catId: number | null) {
   if (catId === null) return "";
@@ -13,10 +15,14 @@ function getCatLabel(catId: number | null) {
 }
 
 export default function RecordPage({
-  dishes, onDishClick, onAddClick,
-}: { dishes: Dish[]; onDishClick: (d: Dish) => void; onAddClick: () => void }) {
+  dishes, onDishClick, onAddClick, onEditDish, onDeleteDish,
+}: { dishes: Dish[]; onDishClick: (d: Dish) => void; onAddClick: () => void; onEditDish: (d: Dish) => void; onDeleteDish: (d: Dish) => void }) {
   const [visibleCount, setVisibleCount] = useState(HOME_DISH_BATCH_SIZE);
+  const [actionDishId, setActionDishId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStart = useRef<Point | null>(null);
+  const longPressTriggered = useRef(false);
   const recent = [...dishes].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const visibleDishes = recent.slice(0, visibleCount);
   const hasMore = visibleCount < recent.length;
@@ -34,6 +40,30 @@ export default function RecordPage({
     observer.observe(target);
     return () => observer.disconnect();
   }, [dishes.length, hasMore]);
+
+  useEffect(() => {
+    const close = () => setActionDishId(null);
+    window.addEventListener("scroll", close, { passive: true });
+    document.addEventListener("click", close);
+    return () => { window.removeEventListener("scroll", close); document.removeEventListener("click", close); };
+  }, []);
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+    pressStart.current = null;
+  };
+
+  const startLongPress = (dish: Dish, event: React.PointerEvent) => {
+    cancelLongPress();
+    longPressTriggered.current = false;
+    pressStart.current = { x: event.clientX, y: event.clientY };
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      navigator.vibrate?.(20);
+      setActionDishId(dish.id);
+    }, 500);
+  };
 
   return (
     <div className={PAGE_CONTENT_CLASS}>
@@ -70,18 +100,31 @@ export default function RecordPage({
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {visibleDishes.map((d) => (
-              <button key={d.id} onClick={() => onDishClick(d)}
-                className="bg-white rounded-2xl border border-gray-100 overflow-hidden text-left transition active:scale-[.97]">
-                <div className="h-28 bg-gray-50 flex items-center justify-center text-5xl relative">
-                  {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="(max-width: 640px) 45vw, 320px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
-                </div>
-                <div className="p-3">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{d.name}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {getCatLabel(d.categoryId)} · {d.timesCooked}次
-                  </p>
-                </div>
-              </button>
+              <div key={d.id} className="relative rounded-2xl">
+                <button
+                  onPointerDown={(event) => startLongPress(d, event)}
+                  onPointerMove={(event) => {
+                    if (pressStart.current && movedPastLongPressTolerance(pressStart.current, { x: event.clientX, y: event.clientY })) cancelLongPress();
+                  }}
+                  onPointerUp={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
+                  onClick={(event) => {
+                    if (longPressTriggered.current) { longPressTriggered.current = false; event.stopPropagation(); return; }
+                    setActionDishId(null);
+                    onDishClick(d);
+                  }}
+                  className="dish-card-motion w-full bg-white rounded-2xl border border-gray-100 overflow-hidden text-left transition active:scale-[.97]">
+                  <div className="h-28 bg-gray-50 flex items-center justify-center text-5xl relative">
+                    {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="(max-width: 640px) 45vw, 320px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
+                  </div>
+                  <div className="p-3 pr-9">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{d.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{getCatLabel(d.categoryId)} · {d.timesCooked}次</p>
+                  </div>
+                </button>
+                <button aria-label={`${d.name}更多操作`} onClick={(event) => { event.stopPropagation(); setActionDishId((current) => current === d.id ? null : d.id); }} className="absolute right-2 bottom-2 z-10 h-8 w-8 rounded-full bg-white/90 text-gray-400 shadow-sm">···</button>
+                {actionDishId === d.id && <DishActionMenu dish={d} onEdit={(dish) => { setActionDishId(null); onEditDish(dish); }} onDelete={(dish) => { setActionDishId(null); onDeleteDish(dish); }} />}
+              </div>
             ))}
           </div>
         )}
