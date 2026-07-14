@@ -10,5 +10,5 @@ export function resolveHorizontalSwipe(
   width: number,
 ): "open" | "closed" | "vertical" {
   if (Math.abs(deltaY) > Math.abs(deltaX)) return "vertical";
-  return deltaX >= width / 3 ? "open" : "closed";
+  return deltaX >= width / 2 ? "open" : "closed";
 }

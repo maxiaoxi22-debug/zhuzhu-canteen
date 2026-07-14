@@ -1,6 +1,7 @@
 "use client";
 import { PointerEvent, ReactNode, useRef, useState } from "react";
 import { Dish } from "@/lib/types";
+import { resolveHorizontalSwipe } from "@/lib/dish-gestures";
 
 const ACTION_WIDTH = 88;
 
@@ -30,6 +31,7 @@ export default function SwipeableDishRow({ dish, open, onOpen, onClose, onClick,
       horizontal.current = true;
     }
     if (!horizontal.current) return;
+    event.preventDefault();
     moved.current = true;
     const next = Math.max(0, Math.min(ACTION_WIDTH, start.current.offset + dx));
     currentOffset.current = next;
@@ -39,9 +41,8 @@ export default function SwipeableDishRow({ dish, open, onOpen, onClose, onClick,
   const pointerEnd = (event: PointerEvent<HTMLDivElement>) => {
     if (!start.current) return;
     const dx = event.clientX - start.current.x;
-    const width = event.currentTarget.getBoundingClientRect().width;
     if (horizontal.current) {
-      if ((!open && dx >= width / 3) || (open && currentOffset.current >= ACTION_WIDTH / 2)) onOpen();
+      if ((!open && resolveHorizontalSwipe(dx, event.clientY - start.current.y, ACTION_WIDTH) === "open") || (open && currentOffset.current >= ACTION_WIDTH / 2)) onOpen();
       else onClose();
     }
     setDragOffset(null);
@@ -53,8 +54,9 @@ export default function SwipeableDishRow({ dish, open, onOpen, onClose, onClick,
     <div className="relative overflow-hidden rounded-2xl bg-red-500">
       <button onClick={() => onDelete(dish)} className="absolute inset-y-0 left-0 w-[88px] text-sm font-semibold text-white">删除</button>
       <div
-        className="dish-swipe-motion relative bg-white touch-pan-y"
-        style={{ transform: `translateX(${offset}px)` }}
+        className="dish-swipe-motion relative bg-white touch-pan-y select-none"
+        style={{ transform: `translateX(${offset}px)`, touchAction: "pan-y", userSelect: "none" }}
+        onDragStart={(event) => event.preventDefault()}
         onPointerDown={(event) => { currentOffset.current = offset; start.current = { x: event.clientX, y: event.clientY, offset }; horizontal.current = false; moved.current = false; event.currentTarget.setPointerCapture(event.pointerId); }}
         onPointerMove={pointerMove}
         onPointerUp={pointerEnd}

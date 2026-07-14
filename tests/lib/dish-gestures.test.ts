@@ -7,9 +7,9 @@ describe("dish gestures", () => {
     expect(movedPastLongPressTolerance({ x: 0, y: 0 }, { x: 5, y: 5 })).toBe(false);
   });
 
-  it("prioritizes vertical scrolling and opens after one third width", () => {
-    expect(resolveHorizontalSwipe(20, 60, 300)).toBe("vertical");
-    expect(resolveHorizontalSwipe(110, 10, 300)).toBe("open");
-    expect(resolveHorizontalSwipe(50, 10, 300)).toBe("closed");
+  it("prioritizes vertical scrolling and opens after half the delete action width", () => {
+    expect(resolveHorizontalSwipe(20, 60, 88)).toBe("vertical");
+    expect(resolveHorizontalSwipe(50, 10, 88)).toBe("open");
+    expect(resolveHorizontalSwipe(30, 10, 88)).toBe("closed");
   });
 });

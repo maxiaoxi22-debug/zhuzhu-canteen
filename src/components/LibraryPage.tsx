@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Dish, CATEGORIES } from "@/lib/types";
 import Image from "next/image";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
@@ -19,12 +19,6 @@ export default function LibraryPage({
   const [search, setSearch] = useState("");
   const [openDishId, setOpenDishId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const close = () => setOpenDishId(null);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, []);
-
   const filtered = dishes.filter((d) => {
     if (catFilter !== "all" && getCatLabel(d.categoryId) !== catFilter) return false;
     if (search && !d.name.includes(search)) return false;
@@ -32,7 +26,7 @@ export default function LibraryPage({
   });
 
   return (
-    <div className={PAGE_CONTENT_CLASS}>
+    <div className={PAGE_CONTENT_CLASS} onClick={() => setOpenDishId(null)}>
       <h1 className="text-2xl font-bold text-gray-900">菜单库</h1>
       <p className="text-gray-400 text-sm mt-0.5">{dishes.length} 道菜，按分类浏览</p>
 
