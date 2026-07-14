@@ -6,20 +6,30 @@ import { eq, desc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { findDishDuplicate } from "@/lib/dish-duplicate-server";
 import { normalizeDishName } from "@/lib/dish-name-match";
+import { withRetry } from "@/lib/network-resilience";
+
+let lastSuccessfulDishes: (typeof dishes.$inferSelect)[] = [];
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q") || "";
-  const cat = searchParams.get("cat") || "";
-
-  let query = db.select().from(dishes).orderBy(desc(dishes.createdAt));
-  if (cat) query = query.where(eq(dishes.categoryId, parseInt(cat))) as typeof query;
-  const result = await query;
-  let data = result;
-  if (q) {
-    data = data.filter((d) => d.name.includes(q));
+  try {
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get("q") || "";
+    const cat = searchParams.get("cat") || "";
+    const result = await withRetry(async () => {
+      let query = db.select().from(dishes).orderBy(desc(dishes.createdAt));
+      if (cat) query = query.where(eq(dishes.categoryId, parseInt(cat))) as typeof query;
+      return await query;
+    }, 2);
+    lastSuccessfulDishes = result;
+    const data = q ? result.filter((dish) => dish.name.includes(q)) : result;
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("GET /api/dishes error:", error);
+    if (lastSuccessfulDishes.length) {
+      return NextResponse.json(lastSuccessfulDishes, { headers: { "X-Zhuzhu-Stale": "1" } });
+    }
+    return NextResponse.json({ error: "菜单服务暂时连接不上，请稍后重试" }, { status: 503 });
   }
-  return NextResponse.json(data);
 }
 
 export async function POST(request: NextRequest) {
