@@ -42,6 +42,18 @@ export interface HistoryEvent {
   dish: Dish;
 }
 
+export interface HistoryFrequency {
+  id: string;
+  name: string;
+  categoryId: number | null;
+  times: number;
+}
+
+export interface HistoryData {
+  events: HistoryEvent[];
+  frequency: HistoryFrequency[];
+}
+
 export interface Category {
   id: number;
   name: string;

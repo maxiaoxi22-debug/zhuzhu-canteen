@@ -9,7 +9,7 @@ import HistoryPage from "@/components/HistoryPage";
 import DishDetail from "@/components/DishDetail";
 import AddDishForm from "@/components/AddDishForm";
 import DeleteDishDialog from "@/components/DeleteDishDialog";
-import { Dish } from "@/lib/types";
+import { Dish, HistoryData } from "@/lib/types";
 
 export type Tab = "record" | "library" | "today" | "history";
 
@@ -26,6 +26,8 @@ export default function Home() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [toast, setToast] = useState("");
+  const [historyData, setHistoryData] = useState<HistoryData>({ events: [], frequency: [] });
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   const fetchDishes = useCallback(async () => {
     setLoadError("");
@@ -41,9 +43,22 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => { fetchDishes(); }, [fetchDishes, refreshKey]);
+  const fetchHistory = useCallback(async () => {
+    try {
+      const response = await fetch("/api/history");
+      const data = await response.json();
+      if (response.ok) setHistoryData({ events: data.events || [], frequency: data.frequency || [] });
+    } catch {
+      // Keep the last successful history snapshot when the network is temporarily unavailable.
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
-  const refresh = () => setRefreshKey((k) => k + 1);
+  useEffect(() => { fetchDishes(); }, [fetchDishes, refreshKey]);
+  useEffect(() => { void fetchHistory(); }, [fetchHistory]);
+
+  const refresh = () => { setRefreshKey((k) => k + 1); void fetchHistory(); };
 
   const confirmDelete = async () => {
     if (!deleteTarget || deleting) return;
@@ -60,6 +75,7 @@ export default function Home() {
       setToast("已删除");
       window.setTimeout(() => setToast(""), 1800);
       await fetchDishes();
+      await fetchHistory();
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : "删除失败，请重试");
     } finally {
@@ -104,7 +120,7 @@ export default function Home() {
         <TodayPage dishes={dishes} onDishClick={setSelectedDish} refresh={refresh} />
       )}
       {tab === "history" && (
-        <HistoryPage dishes={dishes} onDishClick={setSelectedDish} />
+        <HistoryPage events={historyData.events} frequency={historyData.frequency} loading={historyLoading} onDishClick={setSelectedDish} />
       )}
 
       <TabBar active={tab} onTabChange={setTab} />

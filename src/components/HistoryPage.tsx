@@ -1,25 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Dish, HistoryEvent } from "@/lib/types";
+import { Dish, HistoryEvent, HistoryFrequency } from "@/lib/types";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
 
 export default function HistoryPage({
-  dishes, onDishClick,
-}: { dishes: Dish[]; onDishClick: (d: Dish) => void }) {
-  const [events, setEvents] = useState<HistoryEvent[]>([]);
-  const [frequency, setFrequency] = useState<Array<{ id: string; name: string; times: number }>>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((data) => {
-        setEvents(data.events || []);
-        setFrequency(data.frequency || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [dishes]);
+  events, frequency, loading, onDishClick,
+}: { events: HistoryEvent[]; frequency: HistoryFrequency[]; loading: boolean; onDishClick: (d: Dish) => void }) {
 
   const maxFreq = frequency[0]?.times || 1;
 
