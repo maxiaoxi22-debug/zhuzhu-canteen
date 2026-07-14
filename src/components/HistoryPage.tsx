@@ -1,70 +1,81 @@
 "use client";
+
+import Image from "next/image";
 import { Dish, HistoryEvent, HistoryFrequency } from "@/lib/types";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
+import { buildHistoryStats } from "@/lib/history-stats";
+import { getLocalDateKey } from "@/lib/satiety";
+import { getCategoryMeta } from "@/lib/categories";
 
-export default function HistoryPage({
-  events, frequency, loading, onDishClick,
-}: { events: HistoryEvent[]; frequency: HistoryFrequency[]; loading: boolean; onDishClick: (d: Dish) => void }) {
+function formatEventDate(date: string, today: string): string {
+  if (date === today) return "今天";
+  const yesterday = new Date(`${today}T00:00:00.000Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  if (date === yesterday.toISOString().slice(0, 10)) return "昨天";
+  const [, month, day] = date.split("-");
+  return `${Number(month)}月${Number(day)}日`;
+}
 
-  const maxFreq = frequency[0]?.times || 1;
+export default function HistoryPage(props: {
+  events: HistoryEvent[];
+  frequency: HistoryFrequency[];
+  loading: boolean;
+  onDishClick: (dish: Dish) => void;
+}) {
+  const { events, loading, onDishClick } = props;
+  const today = getLocalDateKey();
+  const stats = buildHistoryStats(events, today);
+  const maxCategory = Math.max(1, ...stats.categories.map((category) => category.times));
 
-  if (loading) return <div className="px-5 pt-20 text-center text-gray-400">加载中...</div>;
+  if (loading) return <div className="page-content text-center text-sm text-[var(--muted)]">猪猪正在翻日记…</div>;
 
   return (
     <div className={PAGE_CONTENT_CLASS}>
-      <h1 className="text-2xl font-bold text-gray-900">历史</h1>
-      <p className="text-gray-400 text-sm mt-0.5">看看最近都吃了什么</p>
+      <p className="page-kicker">每一顿都算数</p>
+      <h1 className="page-title">猪猪成长日记</h1>
 
-      {frequency.length > 0 && (
-        <div className="mt-5 bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
-            常做菜品排行
-          </p>
-          <div className="space-y-2.5">
-            {frequency.map((d, i) => {
-              const colors = ["#34c759","#30b350","#4cd964","#84d892","#a8e6b0"];
-              const pct = Math.round(d.times / maxFreq * 100);
-              return (
-                <div key={d.id} className="flex items-center gap-2.5">
-                  <span className={`text-xs w-4 text-center font-bold ${i === 0 ? "text-yellow-500" : "text-gray-400"}`}>{i + 1}</span>
-                  <span className="text-sm w-7 text-center">🍽️</span>
-                  <span className="text-xs text-gray-700 flex-1 truncate font-medium">{d.name}</span>
-                  <div className="w-20 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: colors[i] }} />
-                  </div>
-                  <span className="text-xs text-gray-400 w-10 text-right tabular-nums">{d.times} 次</span>
-                </div>
-              );
-            })}
+      <div className="relative mt-4 h-36 overflow-hidden rounded-[1.6rem] bg-gradient-to-br from-[#ffd8c9] to-[#ffc0ae] p-4.5">
+        <div className="inline-flex rotate-[-2deg] items-center gap-1 rounded-[.65rem] bg-[#fffaf1] px-2.5 py-1.5 text-[.65rem] font-extrabold">🏅 本月吃饭小能手</div>
+        <div className="mt-4"><strong className="block font-serif text-3xl leading-none">{stats.monthlyMeals} 顿</strong><span className="mt-1 block text-[.65rem] text-[#805b50]">这个月已经认真开饭</span></div>
+        <Image src="/pig-mascot-cutout.png" alt="猪猪食堂小猪" width={205} height={205} className="absolute -bottom-[4.5rem] -right-8 h-[12.8rem] w-[12.8rem] object-contain" />
+      </div>
+
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+        <div className="surface-card rounded-[1.05rem] px-3.5 py-3"><strong className="block text-lg">{stats.consecutiveDays} 天</strong><span className="text-[.65rem] text-[var(--muted)]">连续开饭</span></div>
+        <div className="surface-card rounded-[1.05rem] px-3.5 py-3"><strong className="block text-lg">{stats.unlockedCategories} 类</strong><span className="text-[.65rem] text-[var(--muted)]">食物已解锁</span></div>
+      </div>
+
+      <div className="section-head"><h2>六类食物成就</h2><span>按本月真实菜单</span></div>
+      <div className="grid gap-2">
+        {stats.categories.map((category) => (
+          <div key={category.categoryId} className="surface-card grid grid-cols-[2.5rem_1fr_auto] items-center gap-2.5 rounded-[1.05rem] p-2.5">
+            <span className={`category-icon ${category.className} h-10 w-10 text-xl`}>{category.icon}</span>
+            <div className="min-w-0">
+              <b className="block text-xs">{category.achievement}</b>
+              <span className="text-[.58rem] text-[var(--muted)]">{category.favoriteDish ? `最爱${category.favoriteDish}` : `等待解锁${category.name}`}</span>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#f1e7e1]"><i className="block h-full rounded-full bg-[var(--coral)]" style={{ width: `${category.times / maxCategory * 100}%` }} /></div>
+            </div>
+            <span className="min-w-10 text-right text-[.65rem] text-[var(--muted)]">{category.times} 次</span>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
-      <h2 className="text-[15px] font-semibold text-gray-800 mt-6 mb-3">📆 最近记录</h2>
+      <div className="section-head"><h2>投喂时间线</h2><span>本周 {stats.weekMeals} 顿</span></div>
       {events.length === 0 ? (
-        <p className="text-gray-400 text-center py-10 text-sm">还没有点菜记录，去排个菜单吧 📅</p>
+        <p className="py-10 text-center text-sm text-[var(--muted)]">日记还是空的，去安排一顿饭吧 🐽</p>
       ) : (
-        <div className="space-y-2">
-          {events.map((event) => (
-            <button key={event.id}
-              onClick={() => onDishClick(event.dish)}
-              className="w-full bg-white rounded-2xl border border-gray-100 p-3 flex gap-3 text-left transition active:scale-[.98]">
-              <div className="text-2xl flex-shrink-0">{event.type === "dish_created" ? "📸" : "🍽️"}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start">
-                  <p className="text-sm font-semibold text-gray-800">
-                    {event.dish.name}
-                    <span className="text-xs text-gray-400 font-normal ml-1.5">
-                      {event.type === "dish_created" ? "新增菜品" : event.mealType === "breakfast" ? "早餐" : event.mealType === "lunch" ? "午餐" : "晚餐"}
-                    </span>
-                  </p>
-                  <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{event.date}</span>
-                </div>
-              </div>
-              <div className="flex items-center text-gray-300">→</div>
-            </button>
-          ))}
+        <div className="grid gap-2">
+          {events.map((event) => {
+            const meta = getCategoryMeta(event.dish.categoryId);
+            const mealLabel = event.mealType === "breakfast" ? "早餐" : event.mealType === "lunch" ? "午餐" : "晚餐";
+            return (
+              <button key={event.id} onClick={() => onDishClick(event.dish)} className="surface-card grid w-full grid-cols-[2.2rem_1fr_auto] items-center gap-2.5 rounded-[1.05rem] p-2.5 text-left transition active:scale-[.98]">
+                <span className={`category-icon ${meta.className} h-9 w-9 text-lg`}>{meta.icon}</span>
+                <span className="min-w-0"><b className="block truncate text-xs">{event.type === "dish_created" ? `解锁新菜：${event.dish.name}` : `${event.dish.name} · ${mealLabel}`}</b><small className="text-[.58rem] text-[var(--muted)]">{event.type === "dish_created" ? "猪猪尝到了新味道" : `${meta.achievement} +1`}</small></span>
+                <span className="text-[.58rem] text-[var(--muted)]">{formatEventDate(event.date, today)}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

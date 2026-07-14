@@ -13,4 +13,13 @@ describe("history performance", () => {
     expect(home).toContain('fetch("/api/history")');
     expect(page).not.toContain('fetch("/api/history")');
   });
+
+  it("renders the real-data pig diary sections", () => {
+    const page = readFileSync(new URL("../../src/components/HistoryPage.tsx", import.meta.url), "utf8");
+    expect(page).toContain("猪猪成长日记");
+    expect(page).toContain("buildHistoryStats");
+    expect(page).toContain("六类食物成就");
+    expect(page).toContain("投喂时间线");
+    expect(page).toContain("onDishClick(event.dish)");
+  });
 });

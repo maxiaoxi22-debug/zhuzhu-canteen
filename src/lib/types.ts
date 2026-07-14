@@ -54,6 +54,24 @@ export interface HistoryData {
   frequency: HistoryFrequency[];
 }
 
+export interface CategoryAchievement {
+  categoryId: number;
+  name: string;
+  icon: string;
+  className: string;
+  achievement: string;
+  times: number;
+  favoriteDish: string | null;
+}
+
+export interface HistoryStats {
+  monthlyMeals: number;
+  consecutiveDays: number;
+  unlockedCategories: number;
+  categories: CategoryAchievement[];
+  weekMeals: number;
+}
+
 export interface Category {
   id: number;
   name: string;
