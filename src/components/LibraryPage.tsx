@@ -1,15 +1,18 @@
 "use client";
+
 import { useState } from "react";
-import { Dish, CATEGORIES } from "@/lib/types";
 import Image from "next/image";
+import { CATEGORIES, Dish } from "@/lib/types";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
 import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
+import { getCategoryMeta } from "@/lib/categories";
 import SwipeableDishRow from "./SwipeableDishRow";
 
-function getCatLabel(catId: number | null) {
-  if (catId === null) return "";
-  const cats = ["肉类", "青菜", "主食", "海鲜", "汤类", "其他"];
-  return cats[catId - 1] || "";
+function parseIngredients(value: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : value ? [value] : [];
+  } catch { return value ? [value] : []; }
 }
 
 export default function LibraryPage({
@@ -18,64 +21,77 @@ export default function LibraryPage({
   const [catFilter, setCatFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [openDishId, setOpenDishId] = useState<string | null>(null);
+  const query = search.trim().toLowerCase();
 
-  const filtered = dishes.filter((d) => {
-    if (catFilter !== "all" && getCatLabel(d.categoryId) !== catFilter) return false;
-    if (search && !d.name.includes(search)) return false;
-    return true;
+  const filtered = dishes.filter((dish) => {
+    const meta = getCategoryMeta(dish.categoryId);
+    const ingredients = parseIngredients(dish.ingredients).join(" ").toLowerCase();
+    return (catFilter === "all" || meta.name === catFilter)
+      && (!query || `${dish.name} ${ingredients} ${meta.name}`.toLowerCase().includes(query));
   });
 
   return (
     <div className={PAGE_CONTENT_CLASS} onClick={() => setOpenDishId(null)}>
-      <h1 className="text-2xl font-bold text-gray-900">菜单库</h1>
-      <p className="text-gray-400 text-sm mt-0.5">{dishes.length} 道菜，按分类浏览</p>
+      <p className="page-kicker">猪猪的家庭菜谱</p>
+      <h1 className="page-title">饭盆里有什么？</h1>
 
-      <div className="mt-4 relative">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="搜索菜品..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-gray-100 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-300 focus:bg-white transition" />
+      <div className="relative mt-4">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--muted)]">⌕</span>
+        <input
+          type="search"
+          placeholder="搜索菜品或食材…"
+          aria-label="搜索菜品或食材"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="h-12 w-full rounded-[1.05rem] border border-[var(--line)] bg-[var(--paper)] pl-10 pr-4 text-sm text-[var(--cocoa)] outline-none transition focus:border-[var(--coral)] focus:ring-3 focus:ring-[#ef68651c]"
+        />
       </div>
 
-      <div className="flex gap-2 mt-3 overflow-x-auto scrollbar-hide pb-2">
-        {CATEGORIES.map((c) => (
-          <button key={c.key}
-            onClick={() => setCatFilter(c.key)}
-            className={`rounded-2xl px-4 py-1.5 text-sm font-medium whitespace-nowrap transition border ${
-              catFilter === c.key ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-600 border-gray-200"
-            }`}>
-            {c.label}
+      <div className="scrollbar-hide -mx-[1.125rem] mt-3 flex gap-2 overflow-x-auto px-[1.125rem] pb-1">
+        {CATEGORIES.map((category) => (
+          <button
+            key={category.key}
+            onClick={(event) => { event.stopPropagation(); setCatFilter(category.key); }}
+            className={`h-8 flex-none rounded-full border px-3 text-[.7rem] font-bold transition ${catFilter === category.key ? "border-[var(--coral)] bg-[var(--coral)] text-white" : "border-[var(--line)] bg-[var(--paper)] text-[#806c66]"}`}
+          >
+            {category.label}
           </button>
         ))}
       </div>
 
-      <div className="space-y-2 mt-2">
+      <div className="section-head"><h2>全部菜品</h2><span>{filtered.length} 道菜</span></div>
+      <div className="grid gap-2.5">
         {filtered.length === 0 ? (
-          <p className="text-gray-400 text-center py-16 text-sm">
-            {dishes.length === 0 ? "还没有记录菜品，先去拍一张吧 📸" : "没有匹配的菜品"}
-          </p>
-        ) : (
-          filtered.map((d) => (
-            <SwipeableDishRow key={d.id} dish={d} open={openDishId === d.id} onOpen={() => setOpenDishId(d.id)} onClose={() => setOpenDishId(null)} onClick={() => onDishClick(d)} onDelete={(dish) => { setOpenDishId(null); onDeleteDish(dish); }}>
-            <div className="w-full bg-white rounded-2xl border border-gray-100 p-3 flex gap-3 text-left transition active:scale-[.98]">
-              <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 relative overflow-hidden">
-                {d.imageUrl ? <Image src={getDisplayImageSrc(d.imageUrl, process.env.NODE_ENV)} alt={d.name} fill sizes="64px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-800 text-sm">{d.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">
-                  {(() => { try { return JSON.parse(d.ingredients).join("、"); } catch { return d.ingredients; } })()}
-                </p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <span className="text-xs text-gray-400">{getCatLabel(d.categoryId)}</span>
-                  <span className="text-gray-300 text-xs">·</span>
-                  <span className="text-xs text-gray-400">做过{d.timesCooked}次</span>
+          <div className="py-12 text-center text-xs leading-6 text-[var(--muted)]">
+            {dishes.length === 0 ? "饭盆还是空的，先去喂一道菜吧 🐽" : "饭盆里没有找到这道菜，换个关键词试试吧 🐽"}
+          </div>
+        ) : filtered.map((dish) => {
+          const meta = getCategoryMeta(dish.categoryId);
+          const ingredients = parseIngredients(dish.ingredients);
+          return (
+            <SwipeableDishRow
+              key={dish.id}
+              dish={dish}
+              open={openDishId === dish.id}
+              onOpen={() => setOpenDishId(dish.id)}
+              onClose={() => setOpenDishId(null)}
+              onClick={() => onDishClick(dish)}
+              onDelete={(item) => { setOpenDishId(null); onDeleteDish(item); }}
+            >
+              <div className="surface-card grid w-full grid-cols-[3.25rem_1fr_auto] items-center gap-3 rounded-[1.1rem] p-2.5 text-left transition active:scale-[.98]">
+                <div className={`category-icon ${meta.className} relative h-[3.25rem] w-[3.25rem] flex-none overflow-hidden text-2xl`}>
+                  {dish.imageUrl ? <Image src={getDisplayImageSrc(dish.imageUrl, process.env.NODE_ENV)} alt={dish.name} fill sizes="52px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : meta.icon}
                 </div>
+                <div className="min-w-0">
+                  <p className="text-[.82rem] font-bold text-[var(--cocoa)]">{dish.name}</p>
+                  <p className="mt-1 truncate text-[.6rem] text-[var(--muted)]">{ingredients.join("、") || "还没有填写用料"}</p>
+                  <p className="mt-1 text-[.58rem] text-[#b09d96]">{meta.name} · 做过 {dish.timesCooked} 次</p>
+                </div>
+                <span className="text-lg text-[#c9b9b2]">›</span>
               </div>
-              <div className="flex items-center text-gray-300">→</div>
-            </div>
             </SwipeableDishRow>
-          ))
-        )}
+          );
+        })}
       </div>
     </div>
   );
