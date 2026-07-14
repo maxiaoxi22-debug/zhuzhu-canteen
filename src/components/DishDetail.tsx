@@ -3,12 +3,7 @@ import { useState } from "react";
 import { Dish, MEAL_TYPES } from "@/lib/types";
 import Image from "next/image";
 import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
-
-function getCatLabel(catId: number | null) {
-  if (catId === null) return "";
-  const cats = ["肉类", "青菜", "主食", "海鲜", "汤类", "其他"];
-  return cats[catId - 1] || "";
-}
+import { getCategoryMeta } from "@/lib/categories";
 
 export default function DishDetail({ dish, onClose, onEdit, refresh }: { dish: Dish; onClose: () => void; onEdit: () => void; refresh: () => void }) {
   const [adding, setAdding] = useState("");
@@ -41,21 +36,21 @@ export default function DishDetail({ dish, onClose, onEdit, refresh }: { dish: D
   };
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end" style={{ background: "rgba(0,0,0,.35)" }} onClick={onClose}>
-      <div className="bg-white rounded-t-3xl w-full max-h-[88%] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-30 flex items-end bg-[#36251f57] backdrop-blur-[2px]" onClick={onClose}>
+      <div className="animate-slide-up max-h-[88%] w-full overflow-y-auto rounded-t-[1.8rem] bg-[var(--paper)] text-[var(--cocoa)]" onClick={(e) => e.stopPropagation()}>
         <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3" />
         <div className="p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
           <div className="flex justify-end mb-3">
-            <button onClick={onEdit} className="rounded-xl bg-green-50 text-green-600 px-4 py-2 text-sm font-semibold">✏️ 编辑</button>
+            <button onClick={onEdit} className="rounded-xl bg-[#fff0eb] px-4 py-2 text-sm font-semibold text-[var(--coral-dark)]">✏️ 编辑</button>
           </div>
           <div className="h-48 bg-gray-50 rounded-2xl flex items-center justify-center text-7xl relative overflow-hidden">
             {dish.imageUrl ? <Image src={getDisplayImageSrc(dish.imageUrl, process.env.NODE_ENV)} alt={dish.name} fill sizes="(max-width: 640px) 100vw, 640px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : "🍽️"}
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <h2 className="text-xl font-bold text-gray-800">{dish.name}</h2>
-            <span className="bg-green-500 text-white rounded-2xl px-3 py-1 text-xs font-medium">{getCatLabel(dish.categoryId)}</span>
+            <h2 className="text-xl font-bold text-[var(--cocoa)]">{dish.name}</h2>
+            <span className="rounded-2xl bg-[var(--coral)] px-3 py-1 text-xs font-medium text-white">{getCategoryMeta(dish.categoryId).name}</span>
           </div>
-          <p className="text-xs text-gray-400 mt-1">已做过 <span className="text-green-500 font-semibold">{dish.timesCooked}</span> 次</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">已做过 <span className="font-semibold text-[var(--coral)]">{dish.timesCooked}</span> 次</p>
 
           {ingredients.length > 0 && (
             <div className="mt-5">
@@ -74,7 +69,7 @@ export default function DishDetail({ dish, onClose, onEdit, refresh }: { dish: D
               <div className="space-y-3">
                 {steps.map((s, i) => (
                   <div key={i} className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-green-50 text-green-500 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</span>
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[#fff0eb] text-xs font-bold text-[var(--coral)]">{i + 1}</span>
                     <p className="text-sm text-gray-600 leading-relaxed">{s}</p>
                   </div>
                 ))}

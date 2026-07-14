@@ -163,11 +163,11 @@ export default function AddDishForm({
   const canSave = Boolean(editName.trim() && (file || imageUrl) && !duplicateMatch);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end" style={{ background: "rgba(0,0,0,.35)" }} onClick={onClose}>
-      <div className="bg-white rounded-t-3xl w-full max-h-[90%] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-30 flex items-end bg-[#36251f57] backdrop-blur-[2px]" onClick={onClose}>
+      <div className="animate-slide-up max-h-[90%] w-full overflow-y-auto rounded-t-[1.8rem] bg-[var(--paper)] text-[var(--cocoa)]" onClick={(e) => e.stopPropagation()}>
         <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3" />
         <div className="p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">{dish ? "✏️ 编辑菜品" : "📸 记录一道菜"}</h2>
+          <h2 className="mb-4 text-lg font-bold text-[var(--cocoa)]">{dish ? "✏️ 编辑菜品" : "📸 记录一道菜"}</h2>
 
           <input ref={fileRef} type="file" accept="image/*" className="hidden"
             onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} />
@@ -179,8 +179,8 @@ export default function AddDishForm({
               <img src={image} alt="预览" className="w-full h-full rounded-2xl object-cover" />
             ) : (
               <>
-                <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mb-3">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34c759" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#fff0eb]">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef6865" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 </div>
                 <p className="text-sm text-gray-600 font-medium">拍照或从相册选择</p>
                 <p className="text-xs text-gray-400 mt-1">拍摄成品菜照片</p>
@@ -192,7 +192,7 @@ export default function AddDishForm({
           {image && !aiSuccess && (
             <div className="mt-4">
               <button onClick={handleRecognize} disabled={aiLoading}
-                className="w-full bg-blue-500 text-white rounded-2xl py-3.5 font-semibold text-sm active:bg-blue-600 transition disabled:opacity-50">
+                className="w-full rounded-2xl bg-[var(--coral)] py-3.5 text-sm font-semibold text-white transition active:bg-[var(--coral-dark)] disabled:opacity-50">
                 {aiLoading ? "🤖 AI 识别中..." : "🤖 AI 智能识别（可选）"}
               </button>
               <p className="text-xs text-gray-400 text-center mt-2">也可以跳过 AI，直接手动填写下方信息</p>
@@ -209,8 +209,8 @@ export default function AddDishForm({
           )}
 
           {aiSuccess && (
-            <div className="mt-4 bg-green-50 border border-green-200 rounded-2xl p-3">
-              <p className="text-sm font-semibold text-green-600">✅ AI 识别完成，请确认或修改</p>
+            <div className="mt-4 rounded-2xl border border-[#dbe9d5] bg-[#f2f8ef] p-3">
+              <p className="text-sm font-semibold text-[var(--green)]">✅ AI 识别完成，请确认或修改</p>
             </div>
           )}
 
@@ -220,7 +220,7 @@ export default function AddDishForm({
               <div>
                 <label className="text-xs text-gray-400 font-medium">菜品名称 *</label>
                 <input value={editName} onChange={(e) => { setEditName(e.target.value); setDuplicateMatch(null); setDuplicateCheckError(""); }} placeholder="例：红烧排骨"
-                  className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm mt-1 border border-gray-100 outline-none focus:ring-2 focus:ring-green-300" />
+                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#ef68654d]" />
                 {duplicateChecking && <p className="text-xs text-gray-400 mt-2">正在检查菜单库...</p>}
                 {duplicateCheckError && <p className="text-xs text-amber-600 mt-2">{duplicateCheckError}</p>}
                 {duplicateMatch && (
@@ -271,7 +271,7 @@ export default function AddDishForm({
                 </div>
               )}
               <button onClick={handleSave} disabled={saving}
-                className="w-full mt-4 bg-green-500 text-white rounded-2xl py-3.5 font-semibold text-sm active:bg-green-600 transition disabled:opacity-50">
+                className="mt-4 w-full rounded-2xl bg-[var(--coral)] py-3.5 text-sm font-semibold text-white transition active:bg-[var(--coral-dark)] disabled:opacity-50">
               {saving ? "保存中..." : dish ? "💾 保存修改" : "💾 保存到菜单库"}
               </button>
             </>

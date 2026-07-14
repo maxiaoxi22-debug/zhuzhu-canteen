@@ -101,6 +101,17 @@ button:focus-visible { outline: 3px solid rgba(239, 104, 101, .35); outline-offs
 .feed-button:active { transform: scale(.98); }
 .feed-button.is-done { background: var(--green); }
 .feed-button-icon { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border-radius: .65rem; background: rgba(255,255,255,.13); }
+.pig-tabbar {
+  position: fixed; z-index: 20; left: 50%; bottom: max(.55rem, env(safe-area-inset-bottom));
+  width: calc(min(100%, 430px) - 1.25rem); height: 4.3rem; transform: translateX(-50%);
+  padding: .45rem; display: grid; grid-template-columns: repeat(4, 1fr);
+  border: 1px solid rgba(238,224,216,.8); border-radius: 1.5rem;
+  background: rgba(255,253,249,.92); box-shadow: 0 9px 28px rgba(76,50,42,.12); backdrop-filter: blur(16px);
+}
+.pig-tab { border: 0; border-radius: 1.05rem; background: transparent; color: #aa9993; font-size: .58rem; cursor: pointer; }
+.pig-tab > span { display: block; margin-bottom: .15rem; font-size: 1.25rem; line-height: 1; filter: grayscale(1); opacity: .6; }
+.pig-tab.is-active { color: var(--coral-dark); font-weight: 800; background: #fff0eb; }
+.pig-tab.is-active > span { filter: none; opacity: 1; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }

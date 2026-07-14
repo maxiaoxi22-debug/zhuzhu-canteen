@@ -109,7 +109,8 @@ export default function Home() {
   }
 
   return (
-    <div className="bg-white min-h-screen">
+    <main className="app-stage">
+      <div className="app-phone">
       {tab === "record" && (
         <RecordPage dishes={dishes} onDishClick={setSelectedDish} onAddClick={() => setShowAddForm(true)} onEditDish={setEditingDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
@@ -139,6 +140,7 @@ export default function Home() {
       )}
       {deleteTarget && <DeleteDishDialog dish={deleteTarget} deleting={deleting} error={deleteError} onCancel={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(""); } }} onConfirm={confirmDelete} />}
       {toast && <div className="fixed left-1/2 top-6 z-[60] -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">{toast}</div>}
-    </div>
+      </div>
+    </main>
   );
 }
