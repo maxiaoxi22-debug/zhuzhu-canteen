@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { increaseSatiety, readDailySatiety } from "../../src/lib/satiety";
+import { getLocalDateKey, increaseSatiety, readDailySatiety } from "../../src/lib/satiety";
 
 describe("daily satiety", () => {
   it("reads today's valid persisted value", () => {
@@ -17,5 +17,9 @@ describe("daily satiety", () => {
   it("adds twenty and caps at one hundred", () => {
     expect(increaseSatiety({ date: "2026-07-14", value: 40 }, "2026-07-14").value).toBe(60);
     expect(increaseSatiety({ date: "2026-07-14", value: 90 }, "2026-07-14").value).toBe(100);
+  });
+
+  it("uses the phone's local calendar date", () => {
+    expect(getLocalDateKey(new Date(2026, 6, 14, 23, 30))).toBe("2026-07-14");
   });
 });
