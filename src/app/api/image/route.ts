@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const upstream = await fetch(source, { cache: "force-cache" });
+    const upstream = await fetch(source, { cache: "no-store" });
     const contentType = upstream.headers.get("content-type") || "";
     if (!upstream.ok || !contentType.startsWith("image/")) {
       return NextResponse.json({ error: "图片读取失败" }, { status: 502 });
