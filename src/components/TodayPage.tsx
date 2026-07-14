@@ -1,16 +1,13 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useCallback } from "react";
-import { Dish, CATEGORIES, MEAL_TYPES, MealPlan } from "@/lib/types";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { CATEGORIES, Dish, MEAL_TYPES, MealPlan } from "@/lib/types";
 import { PAGE_CONTENT_CLASS } from "@/lib/layout";
 import { BYPASS_IMAGE_OPTIMIZATION, getDisplayImageSrc } from "@/lib/image-display";
-
-function getCatLabel(catId: number | null) {
-  if (catId === null) return "";
-  const cats = ["肉类", "青菜", "主食", "海鲜", "汤类", "其他"];
-  return cats[catId - 1] || "";
-}
+import { getCategoryMeta } from "@/lib/categories";
+import { getLocalDateKey } from "@/lib/satiety";
 
 export default function TodayPage({
   dishes, onDishClick, refresh,
@@ -19,128 +16,136 @@ export default function TodayPage({
   const [randDish, setRandDish] = useState<Dish | null>(null);
   const [todayPlans, setTodayPlans] = useState<MealPlan[]>([]);
   const [adding, setAdding] = useState("");
+  const [message, setMessage] = useState("");
 
-  const pool = randCat === "all" ? dishes : dishes.filter((d) => getCatLabel(d.categoryId) === randCat);
+  const pool = useMemo(
+    () => randCat === "all" ? dishes : dishes.filter((dish) => getCategoryMeta(dish.categoryId).name === randCat),
+    [dishes, randCat],
+  );
 
   const randomize = useCallback(() => {
-    if (pool.length > 0) setRandDish(pool[Math.floor(Math.random() * pool.length)]);
-    else setRandDish(null);
+    if (!pool.length) { setRandDish(null); return; }
+    const alternatives = pool.length > 1 ? pool.filter((dish) => dish.id !== randDish?.id) : pool;
+    setRandDish(alternatives[Math.floor(Math.random() * alternatives.length)] || pool[0]);
+  }, [pool, randDish?.id]);
+
+  useEffect(() => {
+    setRandDish((current) => {
+      if (!pool.length) return null;
+      return pool.some((dish) => dish.id === current?.id)
+        ? current
+        : pool[Math.floor(Math.random() * pool.length)];
+    });
   }, [pool]);
 
-  useEffect(() => { randomize(); }, [randomize]);
-
-  const fetchTodayPlans = async () => {
-    const date = new Date().toISOString().slice(0, 10);
+  const fetchTodayPlans = useCallback(async () => {
     try {
-      const res = await fetch(`/api/plans?date=${date}`);
-      if (res.ok) setTodayPlans(await res.json());
-    } catch {}
-  };
-  useEffect(() => { fetchTodayPlans(); }, [dishes.length]);
+      const response = await fetch(`/api/plans?date=${getLocalDateKey()}`);
+      if (!response.ok) throw new Error("今日菜单读取失败");
+      setTodayPlans(await response.json());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "今日菜单读取失败");
+    }
+  }, []);
+
+  useEffect(() => { void fetchTodayPlans(); }, [fetchTodayPlans, dishes.length]);
 
   const addToPlan = async (dishId: string, mealType: string) => {
     setAdding(mealType);
+    setMessage("");
     try {
-      const date = new Date().toISOString().slice(0, 10);
-      const res = await fetch("/api/plans", {
+      const response = await fetch("/api/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, mealType, dishId }),
+        body: JSON.stringify({ date: getLocalDateKey(), mealType, dishId }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "添加失败，请重试");
-        return;
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "添加失败，请重试");
       }
-      fetchTodayPlans();
+      await fetchTodayPlans();
       refresh();
-    } catch {
-      alert("网络错误，请重试");
+      const meal = MEAL_TYPES.find((item) => item.key === mealType)?.label || "菜单";
+      setMessage(`${randDish?.name || "菜品"} 已加入${meal}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "网络错误，请重试");
     } finally {
       setAdding("");
     }
   };
 
-  const getDish = (id: string | null) => dishes.find((d) => d.id === id);
+  const removePlan = async (id: number) => {
+    setMessage("");
+    try {
+      const response = await fetch(`/api/plans?id=${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("移除失败，请重试");
+      await fetchTodayPlans();
+      refresh();
+      setMessage("已从今日菜单移除");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "移除失败，请重试");
+    }
+  };
+
+  const getDish = (id: string | null) => dishes.find((dish) => dish.id === id);
+  const recommendationMeta = getCategoryMeta(randDish?.categoryId ?? null);
 
   return (
     <div className={PAGE_CONTENT_CLASS}>
-      <h1 className="text-2xl font-bold text-gray-900">今天吃点啥</h1>
-      <p className="text-gray-400 text-sm mt-0.5">选不出来？让菜库帮你决定</p>
+      <p className="page-kicker">让猪猪帮你决定</p>
+      <h1 className="page-title">今天吃点啥？</h1>
 
-      <div className="mt-4 rounded-2xl p-5 border" style={{ background: "linear-gradient(135deg,#f0fdf4,#fafdf7)", borderColor: "#d1f0d9" }}>
-        <p className="text-xs text-green-500 font-semibold mb-3 flex items-center gap-1">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
-          随机推荐
-        </p>
-        <div className="flex gap-2 mb-3 overflow-x-auto scrollbar-hide">
-          {CATEGORIES.map((c) => (
-            <button key={c.key}
-              onClick={() => setRandCat(c.key)}
-              className={`rounded-2xl px-3 py-1.5 text-xs font-medium whitespace-nowrap transition border ${
-                randCat === c.key ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-600 border-gray-200"
-              }`}>
-              {c.label}
-            </button>
-          ))}
-        </div>
+      <div className="scrollbar-hide -mx-[1.125rem] mt-3 flex gap-2 overflow-x-auto px-[1.125rem] pb-1">
+        {CATEGORIES.map((category) => (
+          <button key={category.key} onClick={() => setRandCat(category.key)} className={`h-8 flex-none rounded-full border px-3 text-[.7rem] font-bold transition ${randCat === category.key ? "border-[var(--coral)] bg-[var(--coral)] text-white" : "border-[var(--line)] bg-[var(--paper)] text-[#806c66]"}`}>
+            {category.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-[1.55rem] bg-gradient-to-br from-[#ffe0d3] to-[#ffcab9] p-3.5">
+        <div className="flex items-center justify-between text-[.65rem] font-extrabold text-[#8c5d51]"><span>✦ 猪猪随机推荐</span><span>{randCat === "all" ? "全部菜品" : randCat}</span></div>
         {randDish ? (
-          <button onClick={() => onDishClick(randDish)} className="bg-white rounded-2xl p-5 text-center w-full active:scale-[.98] transition">
-            <div className="text-5xl mb-2 w-16 h-16 mx-auto relative">{randDish.imageUrl ? <Image src={getDisplayImageSrc(randDish.imageUrl, process.env.NODE_ENV)} alt={randDish.name} fill sizes="64px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="rounded-xl object-cover" /> : "🍽️"}</div>
-            <p className="text-lg font-bold text-gray-800">{randDish.name}</p>
-            <p className="text-xs text-gray-400 mt-1">{getCatLabel(randDish.categoryId)} · 做过{randDish.timesCooked}次</p>
+          <button onClick={() => onDishClick(randDish)} className="mt-3 w-full rounded-[1.25rem] bg-[#fffdf9f0] p-4 text-center transition active:scale-[.98]">
+            <div className={`category-icon ${recommendationMeta.className} relative mx-auto h-[4.9rem] w-[4.9rem] overflow-hidden text-[2.6rem]`}>
+              {randDish.imageUrl ? <Image src={getDisplayImageSrc(randDish.imageUrl, process.env.NODE_ENV)} alt={randDish.name} fill sizes="78px" unoptimized={BYPASS_IMAGE_OPTIMIZATION} className="object-cover" /> : recommendationMeta.icon}
+            </div>
+            <h2 className="mt-2.5 text-lg font-extrabold text-[var(--cocoa)]">{randDish.name}</h2>
+            <p className="mt-1 text-[.65rem] text-[var(--muted)]">{recommendationMeta.name} · 做过 {randDish.timesCooked} 次</p>
           </button>
         ) : (
-          <div className="bg-white rounded-2xl p-8 text-center text-gray-400 text-sm">
-            该分类暂无菜品<br />先去拍一张吧 📸
-          </div>
+          <div className="mt-3 rounded-[1.25rem] bg-[#fffdf9f0] p-8 text-center text-sm text-[var(--muted)]">该分类暂无菜品<br />先去喂一道菜吧 🐽</div>
         )}
-        <div className="flex gap-3 mt-4">
-          <button onClick={randomize}
-            className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 rounded-2xl py-3 text-sm font-semibold text-gray-600 active:bg-gray-50 transition">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            换一道
-          </button>
-        </div>
-        <div className="flex gap-2 mt-2">
-          {MEAL_TYPES.map((mt) => (
-            <button key={mt.key} onClick={() => addToPlan(randDish!.id, mt.key)} disabled={!randDish || adding !== ""}
-              className="flex-1 bg-green-500 text-white rounded-xl py-2.5 text-xs font-semibold active:bg-green-600 transition disabled:opacity-40">
-              {adding === mt.key ? "添加中..." : `${mt.emoji} ${mt.label}`}
+        <button onClick={randomize} disabled={!randDish} className="mt-2.5 h-10 w-full rounded-[.9rem] border border-[#68463a1f] bg-white/80 text-xs font-extrabold text-[var(--cocoa)] disabled:opacity-40">↻ 换一道，让猪猪再想想</button>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {MEAL_TYPES.map((meal) => (
+            <button key={meal.key} onClick={() => randDish && addToPlan(randDish.id, meal.key)} disabled={!randDish || Boolean(adding)} className="h-10 rounded-[.8rem] bg-[var(--cocoa)] text-[.65rem] font-extrabold text-white disabled:opacity-40">
+              {adding === meal.key ? "添加中…" : `${meal.emoji} ${meal.label}`}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="mt-6">
-        <h2 className="text-[15px] font-semibold text-gray-800 mb-3">📅 今日菜单</h2>
-        <div className="space-y-2">
-          {MEAL_TYPES.map((mt) => {
-            const plan = todayPlans.filter((p) => p.mealType === mt.key);
-            return (
-              <div key={mt.key} className="bg-white rounded-2xl border border-gray-100 p-3">
-                <p className="text-xs font-semibold text-gray-500 mb-1">{mt.emoji} {mt.label}</p>
-                {plan.length === 0 ? (
-                  <p className="text-sm text-gray-300">还没想好</p>
-                ) : (
-                  plan.map((p) => {
-                    const d = getDish(p.dishId);
-                    return d ? (
-                      <div key={p.id} className="flex items-center gap-2 py-0.5">
-                        <span className="text-sm">🍽️</span>
-                        <span className="text-sm font-medium text-gray-800 flex-1">{d.name}</span>
-                        <button onClick={async () => {
-                          await fetch(`/api/plans?id=${p.id}`, { method: "DELETE" });
-                          fetchTodayPlans();
-                        }} className="text-xs text-red-400">✕</button>
-                      </div>
-                    ) : null;
-                  })
-                )}
+      {message && <p role="status" className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-center text-xs text-[#806d67]">{message}</p>}
+
+      <div className="section-head"><h2>今日菜单</h2><span>实时保存到家庭菜单</span></div>
+      <div className="grid gap-2.5">
+        {MEAL_TYPES.map((meal) => {
+          const plans = todayPlans.filter((plan) => plan.mealType === meal.key);
+          return (
+            <div key={meal.key} className="surface-card rounded-[1.1rem] p-3">
+              <div className="flex items-center justify-between text-[.7rem] font-extrabold text-[#806d67]"><span>{meal.emoji} {meal.label}</span><span>{plans.length ? "已安排" : "待投喂"}</span></div>
+              <div className="mt-2 grid min-h-8 gap-1.5">
+                {plans.length === 0 ? <span className="text-xs text-[#c3b2ab]">还没想好，先让猪猪推荐一道吧</span> : plans.map((plan) => {
+                  const dish = getDish(plan.dishId);
+                  if (!dish) return null;
+                  const meta = getCategoryMeta(dish.categoryId);
+                  return <div key={plan.id} className="flex items-center gap-2"><span className={`category-icon ${meta.className} h-8 w-8 text-base`}>{meta.icon}</span><strong className="flex-1 text-xs">{dish.name}</strong><button onClick={() => void removePlan(plan.id)} aria-label={`移除${dish.name}`} className="h-7 w-7 rounded-lg bg-[#fff0ec] text-[var(--coral-dark)]">×</button></div>;
+                })}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
