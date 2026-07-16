@@ -127,6 +127,22 @@ describe("dish plus wishlist transaction", () => {
     expect(await scalar("SELECT count(*) AS value FROM wishlist_completions")).toBe(0);
   });
 
+  it("rolls back every row when SQLite rejects the completion insert", async () => {
+    await client!.execute(`
+      CREATE TRIGGER reject_completion BEFORE INSERT ON wishlist_completions
+      BEGIN
+        SELECT RAISE(FAIL, 'completion insert blocked');
+      END
+    `);
+
+    await expect(saveDishAndMaybeCompleteWish(database, request())).rejects.toThrow();
+
+    expect(await scalar("SELECT count(*) AS value FROM dishes")).toBe(0);
+    const wish = await client!.execute("SELECT status, completed_dish_id FROM wishlist_items WHERE id='wish-1'");
+    expect(wish.rows[0]).toMatchObject({ status: "pending", completed_dish_id: null });
+    expect(await scalar("SELECT count(*) AS value FROM wishlist_completions")).toBe(0);
+  });
+
   it("saves only the dish when completion is declined", async () => {
     const result = await saveDishAndMaybeCompleteWish(database, { ...request(), completeWishlist: false });
 

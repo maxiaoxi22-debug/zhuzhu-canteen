@@ -39,6 +39,28 @@ export function buildWishlistCompletionFields(
   };
 }
 
+export interface PendingSaveSnapshot {
+  readonly revision: number;
+  readonly name: string;
+  readonly categoryId: number | null;
+  readonly categoryKey: string;
+  readonly imageUrl: string;
+  readonly ingredients: readonly string[];
+  readonly steps: readonly string[];
+}
+
+export function createPendingSaveSnapshot(
+  revision: number,
+  input: Omit<PendingSaveSnapshot, "revision">,
+): PendingSaveSnapshot {
+  return Object.freeze({
+    ...input,
+    revision,
+    ingredients: Object.freeze([...input.ingredients]),
+    steps: Object.freeze([...input.steps]),
+  });
+}
+
 export class DishSaveError extends Error {
   constructor(message: string, public match?: DishDuplicateMatch) {
     super(message);

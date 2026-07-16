@@ -47,3 +47,23 @@ Final focused re-review returned **Ready** with no Critical, Important, or Minor
 - All database and API writes in tests used disposable local file databases and injected handlers.
 - No production database, real Gemini/Ollama, Vercel Blob, or other external service was called.
 - User-owned untracked `CLAUDE.md` and `docs/design-prototype.html` were not modified or staged.
+
+## External-review follow-up: immutable saves and mounted UI races
+
+An external review found that form fields could theoretically change while the pending-wishlist lookup was unresolved, allowing a matched wish from the old form state to be combined with newer rendered fields. The follow-up introduces an immutable `PendingSaveSnapshot` containing one revision plus the exact name, category, image URL, ingredients, and steps captured at save-click time.
+
+- Pending matching, confirmation state, and the eventual dish request all consume that same frozen snapshot.
+- Name/category/ingredients/steps edits, candidate selection, generated recipe application, and a new image selection invalidate the pending save revision and remove stale confirmation state.
+- Form controls are disabled during pending lookup and submission. A synchronous submission ref prevents two confirmation clicks in the same render turn from issuing duplicate requests.
+- Backdrop close is ignored during lookup/submission, unmount cleanup invalidates the pending save revision, and delayed duplicate-result navigation buttons are disabled while saving.
+- A jsdom development dependency and Vitest source alias allow mounting the real React component with `createRoot` and `act`.
+- Mounted delayed-Promise tests prove that a field change invalidates an unresolved wishlist match, two immediate confirmation clicks make one dish request with the captured snapshot, stale upload/recognition responses do not enter rendered state, and the final dish request retains the newest image URL.
+- A real SQLite `BEFORE INSERT ON wishlist_completions` trigger raises an insert failure. The regression proves the dish row and dish link are absent, the wish remains pending with no completed-dish link, and no completion snapshot survives.
+
+Follow-up verification:
+
+- Target and related regression command — PASS: 7 files / 42 tests.
+- `npm test` — PASS: 34 files / 124 tests.
+- `npm run test:db` — PASS: 1 file / 6 tests.
+- TypeScript, ESLint, production build, and `git diff --check` — PASS.
+- Final closure re-review — **Ready**, with no Critical, Important, or Minor findings.
