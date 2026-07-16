@@ -87,6 +87,53 @@ export interface RecognitionResult {
   imageUrl: string;
 }
 
+export interface RecipeSearchResult {
+  id: string;
+  name: string;
+  categoryKey: string;
+  description: string | null;
+  servings: number | null;
+  estimatedTimeMinutes: number | null;
+  imageUrl: string | null;
+  isWishlisted: boolean;
+  isCooked: boolean;
+}
+
+export interface RecipeIngredient {
+  id: number;
+  recipeId: string;
+  sortOrder: number;
+  ingredientName: string;
+  amountValue: number | null;
+  amountUnit: string | null;
+  amountText: string;
+  optional: boolean;
+  note: string | null;
+}
+
+export interface RecipeStep {
+  id: number;
+  recipeId: string;
+  sortOrder: number;
+  text: string;
+  sectionName: string | null;
+}
+
+export interface RecipeDetail extends RecipeSearchResult {
+  nameKey: string;
+  sourceName: string;
+  sourceUrl: string;
+  sourceLicense: string;
+  sourcePath: string;
+  sourceRevision: string;
+  contentHash: string;
+  createdAt: string;
+  updatedAt: string;
+  ingredients: RecipeIngredient[];
+  steps: RecipeStep[];
+  aliases: string[];
+}
+
 export const CATEGORIES = [
   { key: "all", label: "全部" },
   { key: "肉类", label: "🥩 肉类" },
