@@ -9,4 +9,5 @@ drizzle
 .worktrees
 .superpowers
 backups/
+.cache/
 *.tsbuildinfo

@@ -1,0 +1,15 @@
+{
+  "source": "HowToCook",
+  "revision": "753d4940fe06ce0d5ef767e8fe046c88635a391c",
+  "discovered": 368,
+  "parsed": 367,
+  "skipped": 1,
+  "fatalFailures": 0,
+  "failures": [
+    {
+      "sourcePath": "dishes/template/示例菜/示例菜.md",
+      "reason": "Unknown HowToCook category folder: template",
+      "fatal": false
+    }
+  ]
+}

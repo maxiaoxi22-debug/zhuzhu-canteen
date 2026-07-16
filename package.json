@@ -13,6 +13,8 @@
     "test:db": "vitest run tests/db",
     "db:migrate:recipes": "tsx scripts/db/migrate-recipes-wishlist.ts",
     "db:backup": "tsx scripts/db/export-backup.ts",
+    "recipes:stage": "tsx scripts/howtocook/stage.ts",
+    "recipes:import": "tsx scripts/howtocook/import.ts",
     "seed": "npx tsx src/db/seed.ts"
   },
   "dependencies": {
