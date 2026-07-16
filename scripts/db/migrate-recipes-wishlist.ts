@@ -1,7 +1,9 @@
 import { createClient } from "@libsql/client";
-import "dotenv/config";
+import { config } from "dotenv";
 import { pathToFileURL } from "node:url";
 import { applyRecipesWishlistMigration } from "../../src/db/migrate";
+
+config({ path: ".env.local" });
 
 const PLANNED_TABLES = [
   "recipes",

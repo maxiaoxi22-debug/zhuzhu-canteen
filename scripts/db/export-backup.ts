@@ -1,7 +1,9 @@
-import { createClient, type Client } from "@libsql/client";
-import "dotenv/config";
+import { createClient, type Client, type Transaction } from "@libsql/client";
+import { config } from "dotenv";
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+
+config({ path: ".env.local" });
 
 export interface DatabaseSnapshotTable {
   name: string;
@@ -45,8 +47,8 @@ function encodeSnapshotValue(value: unknown): DatabaseSnapshotValue {
   throw new TypeError(`Unsupported database value in backup: ${typeof value}`);
 }
 
-async function rowOrderClause(client: Client, tableName: string): Promise<string> {
-  const columns = await client.execute(`PRAGMA table_info(${quoteIdentifier(tableName)})`);
+async function rowOrderClause(executor: Pick<Transaction, "execute">, tableName: string): Promise<string> {
+  const columns = await executor.execute(`PRAGMA table_info(${quoteIdentifier(tableName)})`);
   const orderedColumns = [...columns.rows]
     .sort((left, right) => Number(left.pk) - Number(right.pk))
     .filter((column) => Number(column.pk) > 0)
@@ -57,11 +59,10 @@ async function rowOrderClause(client: Client, tableName: string): Promise<string
   return names.length > 0 ? ` ORDER BY ${names.map(quoteIdentifier).join(", ")}` : "";
 }
 
-export async function exportDatabaseSnapshot(
-  client: Client,
-  outputPath: string,
-): Promise<DatabaseSnapshot> {
-  const tableResult = await client.execute(`
+type SnapshotExecutor = Pick<Transaction, "execute">;
+
+async function readDatabaseSnapshot(executor: SnapshotExecutor): Promise<DatabaseSnapshot> {
+  const tableResult = await executor.execute(`
     SELECT name, sql
     FROM sqlite_master
     WHERE type = 'table'
@@ -76,18 +77,43 @@ export async function exportDatabaseSnapshot(
   for (const table of tableResult.rows) {
     const name = String(table.name);
     const sql = String(table.sql);
-    const orderClause = await rowOrderClause(client, name);
-    const result = await client.execute(`SELECT * FROM ${quoteIdentifier(name)}${orderClause}`);
+    const orderClause = await rowOrderClause(executor, name);
+    const result = await executor.execute(`SELECT * FROM ${quoteIdentifier(name)}${orderClause}`);
     const rows = result.rows.map((row) => Object.fromEntries(
       Object.entries(row).map(([column, value]) => [column, encodeSnapshotValue(value)]),
     ));
     tables.push({ name, sql, rows });
   }
 
-  const snapshot: DatabaseSnapshot = {
+  return {
     exportedAt: new Date().toISOString(),
     tables,
   };
+}
+
+export async function exportDatabaseSnapshot(
+  client: Client,
+  outputPath: string,
+): Promise<DatabaseSnapshot> {
+  let snapshot: DatabaseSnapshot;
+  if (client.protocol === "file") {
+    await client.execute("BEGIN");
+    try {
+      snapshot = await readDatabaseSnapshot(client);
+      await client.execute("COMMIT");
+    } catch (error) {
+      await client.execute("ROLLBACK");
+      throw error;
+    }
+  } else {
+    const transaction = await client.transaction("read");
+    try {
+      snapshot = await readDatabaseSnapshot(transaction);
+      await transaction.commit();
+    } finally {
+      transaction.close();
+    }
+  }
   await writeFile(outputPath, `${JSON.stringify(snapshot, null, 2)}\n`, {
     encoding: "utf8",
     flag: "wx",

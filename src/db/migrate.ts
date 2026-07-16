@@ -1,4 +1,4 @@
-import type { Client } from "@libsql/client";
+import type { Client, Transaction } from "@libsql/client";
 
 const MIGRATION_SQL = `
 CREATE TABLE IF NOT EXISTS recipes (
@@ -52,17 +52,50 @@ const LEGACY_COLUMNS = [
   { table: "meal_plans", column: "owner_id", definition: "text" },
 ] as const;
 
-async function hasColumn(client: Client, table: string, column: string): Promise<boolean> {
-  const result = await client.execute(`PRAGMA table_info(${table})`);
+async function hasColumn(executor: Pick<Transaction, "execute">, table: string, column: string): Promise<boolean> {
+  const result = await executor.execute(`PRAGMA table_info(${table})`);
   return result.rows.some((row) => row.name === column);
 }
 
-export async function applyRecipesWishlistMigration(client: Client): Promise<void> {
-  await client.executeMultiple(MIGRATION_SQL);
+type MigrationExecutor = Pick<Transaction, "execute" | "executeMultiple">;
+
+async function applyMigrationStatements(executor: MigrationExecutor): Promise<void> {
+  await executor.executeMultiple(MIGRATION_SQL);
 
   for (const { table, column, definition } of LEGACY_COLUMNS) {
-    if (!(await hasColumn(client, table, column))) {
-      await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    if (!(await hasColumn(executor, table, column))) {
+      await executor.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
+  }
+}
+
+async function executeMultipleLocally(client: Client, sql: string): Promise<void> {
+  for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await client.execute(statement);
+  }
+}
+
+export async function applyRecipesWishlistMigration(client: Client): Promise<void> {
+  if (client.protocol === "file") {
+    await client.execute("BEGIN IMMEDIATE");
+    try {
+      await applyMigrationStatements({
+        execute: client.execute.bind(client),
+        executeMultiple: (sql) => executeMultipleLocally(client, sql),
+      });
+      await client.execute("COMMIT");
+    } catch (error) {
+      await client.execute("ROLLBACK");
+      throw error;
+    }
+    return;
+  }
+
+  const transaction = await client.transaction("write");
+  try {
+    await applyMigrationStatements(transaction);
+    await transaction.commit();
+  } finally {
+    transaction.close();
   }
 }
