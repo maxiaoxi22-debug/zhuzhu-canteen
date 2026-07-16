@@ -406,8 +406,8 @@
       },
       {
         "ingredientName": "蒜",
-        "amountValue": 7,
-        "amountUnit": "瓣大蒜",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "7 瓣大蒜",
         "optional": false,
         "note": null
@@ -484,7 +484,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "8fd2276b332b618ca8ab097fd752eb63ef2fdf6f11bf6580843bb2604aa10ba9"
+    "contentHash": "01ed16d89450cc7d05d3a74a78d14966fe1df3cdead8a5b2aeaec5a446e43306"
   },
   {
     "id": "c7f01b2b-375b-5c04-8039-ad2f00d45e1f",
@@ -2918,8 +2918,8 @@
       },
       {
         "ingredientName": "大葱葱白",
-        "amountValue": 1,
-        "amountUnit": "根大葱的葱白即可",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "1 根大葱的葱白即可",
         "optional": false,
         "note": null
@@ -3016,7 +3016,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "5e55ccd0eee5e201d27cd577103edf1362529676c36ffcdfbbfc39eea87f696e"
+    "contentHash": "1d139a1c4459d38a38eec0b87f83f1d5a9e90172e29e6ce0f5d4ab20e727f8a6"
   },
   {
     "id": "5b6b1039-e172-5492-8b0b-cebd50a7edcd",
@@ -3628,8 +3628,8 @@
     "ingredients": [
       {
         "ingredientName": "翘嘴鱼",
-        "amountValue": 2,
-        "amountUnit": "斤最佳",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "2 斤最佳",
         "optional": false,
         "note": null
@@ -3770,7 +3770,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "ca05cc48157a9fe839474b82e4f5082b049f47d67d5c36ec0d4f12e37d3bc53a"
+    "contentHash": "8d99a91afa41f406cf3a47d413d86d3e146859a94eaeacda46fc93e24fa23489"
   },
   {
     "id": "b78a602f-7bb5-59bb-9d74-372befd56d3e",
@@ -5199,8 +5199,8 @@
     "ingredients": [
       {
         "ingredientName": "鸡蛋",
-        "amountValue": 1,
-        "amountUnit": "颗或更多",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "1 颗或更多",
         "optional": false,
         "note": "只要您的电锅装得下，不管有几颗鸡蛋都可以"
@@ -5245,7 +5245,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "2b03acfb5a638df900d05ce9fc704675bc3950059e0ea655ad1b5e78b834697c"
+    "contentHash": "32304d323b7d1d6829494c4d9fe6873e9244b668e574008514449494cf3c12dc"
   },
   {
     "id": "813913bb-b848-50b1-a31c-85a76ccb88a5",
@@ -10646,8 +10646,8 @@
       },
       {
         "ingredientName": "冰块",
-        "amountValue": 160,
-        "amountUnit": "克以上",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "160 克以上",
         "optional": false,
         "note": null
@@ -10768,7 +10768,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "8135a489faa4ffa9784f59cd093679a3c7625581034390de3469c4317fb5522b"
+    "contentHash": "b09c06a3bd5f105f46df3c71cc0a12e6233f1269ef6a4fa2a6a891d1573e617a"
   },
   {
     "id": "a9b2b19b-4498-59a8-b1f9-2b90a737471b",
@@ -11816,8 +11816,8 @@
       },
       {
         "ingredientName": "桂皮",
-        "amountValue": 4,
-        "amountUnit": "厘米一小片",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "4 厘米一小片",
         "optional": false,
         "note": null
@@ -11930,7 +11930,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "485d921805370187893fd796e2f4465ca187f74ef9d14b5ddfadb7ceee7f615d"
+    "contentHash": "5f1cf7ad60546799b161c710e836eb043c0ed34df220072e1ac0cfe80f6c72e2"
   },
   {
     "id": "eecdff25-120b-5c7c-8521-c2cdb9d8b381",
@@ -30473,8 +30473,8 @@
       },
       {
         "ingredientName": "生姜",
-        "amountValue": 1,
-        "amountUnit": "拇指块",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "1 拇指块",
         "optional": false,
         "note": null
@@ -30567,7 +30567,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "aeae62dec089a159fafa68a8249ac8475fbc368a91f9404a80c4218f1ecf7570"
+    "contentHash": "353db6004e593a0949fd8495a552e7a09ddfced6305d0903ed17ae770490b709"
   },
   {
     "id": "bec5111c-c001-5df6-8ee2-0476f89327f8",
@@ -38638,8 +38638,8 @@
       },
       {
         "ingredientName": "如果想要酱料鲜一些，可以加入",
-        "amountValue": 2,
-        "amountUnit": "克糖",
+        "amountValue": null,
+        "amountUnit": null,
         "amountText": "2 克糖",
         "optional": false,
         "note": null
@@ -38704,7 +38704,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "63870e225940a75b10eb6dd327afbb28fcc784e7d95d044a7005c8050fb607c7"
+    "contentHash": "a2f99be418d8672449e15515d7e93f97f7ce6665eae889677b7397c3e061e12f"
   },
   {
     "id": "bd81d94e-fccb-53b5-acab-9b999a778846",

@@ -113,12 +113,22 @@ function numberCount(value: string): number {
   return value.match(/\d+(?:\.\d+)?/g)?.length ?? 0;
 }
 
-export function isUnsafeAmountExpression(value: string): boolean {
+const SAFE_AMOUNT_UNITS = new Set([
+  "g", "kg", "ml", "mL", "L", "cc", "cm", "cup",
+  "克", "千克", "斤", "毫升", "升", "公分", "厘米",
+  "个", "颗", "枚", "盒", "片", "根", "瓣", "勺", "汤匙", "茶匙",
+  "包", "罐", "碗", "杯", "块", "小块", "只", "条", "把", "株", "张",
+  "份", "人份", "滴", "段", "粒", "棵", "朵", "叶", "袋", "圈", "撮",
+  "节", "倍", "瓶",
+]);
+
+function isUnsafeAmountExpression(value: string): boolean {
   if (numberCount(value) > 1) return true;
   if (/[+*×]/.test(value)) return true;
   if (/(?:\/\s*人|每(?:人|颗|份)|份数)/.test(value)) return true;
   if (/\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*\s*(?:-|–|—|~|～|至|到|\/)\s*\d/u.test(value)) return true;
-  return /(?:大约|约|左右|至少|最多)\s*\d/.test(value);
+  if (/(?:大约|约|左右|至少|最多)\s*\d/.test(value)) return true;
+  return /\d[^\n]*(?:左右|上下|以上|以下|或更多|最佳|大?约|约等(?:于)?)\s*[。.]?$/.test(value);
 }
 
 function cleanIngredientName(value: string): string {
@@ -177,7 +187,10 @@ function parseIngredient(item: string): StagedIngredient {
     const beforeParentheses = item.slice(0, noteMatch.index).trim();
     const parenthesesAmount = item.slice(noteMatch.index).trim();
     const exact = noteMatch[1].trim().match(/^(\d+(?:\.\d+)?)\s*([\p{L}\p{Script=Han}]+)$/u);
-    if (exact && numberCount(item) === 1 && !isUnsafeAmountExpression(noteMatch[1])) {
+    if (exact
+      && SAFE_AMOUNT_UNITS.has(exact[2])
+      && numberCount(item) === 1
+      && !isUnsafeAmountExpression(noteMatch[1])) {
       return {
         ingredientName: cleanIngredientName(beforeParentheses),
         amountValue: Number(exact[1]),
@@ -233,6 +246,9 @@ function parseIngredient(item: string): StagedIngredient {
     ?? withoutNote.match(/^(.+?)(\d+(?:\.\d+)?)\s*([\p{L}\p{Script=Han}]+)\s*$/u);
 
   if (numeric) {
+    if (!SAFE_AMOUNT_UNITS.has(numeric[3])) {
+      return unsafeIngredient(withoutNote, optional, note);
+    }
     return {
       ingredientName: numeric[1].trim().replace(/[：:=的数量]+$/u, "").trim(),
       amountValue: Number(numeric[2]),

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { applyRecipesWishlistMigration } from "../../src/db/migrate";
 import { importStagedRecipes, resolveImportMode } from "../../scripts/howtocook/import";
-import { isUnsafeAmountExpression, parseHowToCookMarkdown, type StagedRecipe } from "../../scripts/howtocook/parse";
+import { parseHowToCookMarkdown, type StagedRecipe } from "../../scripts/howtocook/parse";
 import { stageFromCheckout } from "../../scripts/howtocook/stage";
 
 const HOW_TO_COOK_REVISION = "753d4940fe06ce0d5ef767e8fe046c88635a391c";
@@ -183,6 +183,39 @@ describe("HowToCook markdown parser", () => {
     }));
   });
 
+  it("keeps suffix-qualified real amounts unstructured", () => {
+    const items = [
+      ["翘嘴鱼 2 斤最佳", "翘嘴鱼", "2 斤最佳"],
+      ["鸡蛋 1 颗或更多", "鸡蛋", "1 颗或更多"],
+      ["冰块 160 克以上", "冰块", "160 克以上"],
+      ["清水 500ml左右", "清水", "500ml左右"],
+      ["面粉 300g上下", "面粉", "300g上下"],
+      ["盐 5g以下", "盐", "5g以下"],
+      ["黄油 20g约", "黄油", "20g约"],
+      ["糖 10g约等于", "糖", "10g约等于"],
+      ["香料（2 把香菜）", "香料", "（2 把香菜）"],
+    ] as const;
+    const markdown = fixture.replace(
+      /每份：[\s\S]*?(?=\n## 操作)/,
+      `每份：\n\n${items.map(([item]) => `- ${item}`).join("\n")}\n`,
+    );
+    const parsed = parseHowToCookMarkdown({
+      path: "dishes/aquatic/示例菜/示例菜.md",
+      markdown,
+      revision: HOW_TO_COOK_REVISION,
+    });
+
+    if ("failure" in parsed) throw new Error(parsed.failure);
+    for (const [, ingredientName, amountText] of items) {
+      expect(parsed.ingredients).toContainEqual(expect.objectContaining({
+        ingredientName,
+        amountText,
+        amountValue: null,
+        amountUnit: null,
+      }));
+    }
+  });
+
   it("falls back to the required-items section when calculation has no list", () => {
     const markdown = fixture.replace(
       /每份：[\s\S]*?(?=\n## 操作)/,
@@ -273,11 +306,26 @@ describe("HowToCook staging", () => {
       join(process.cwd(), "data/howtocook/recipes.json"),
       "utf8",
     )) as StagedRecipe[];
+    const allowedUnits = new Set([
+      "g", "kg", "ml", "mL", "L", "cc", "cm", "cup",
+      "克", "千克", "斤", "毫升", "升", "公分", "厘米",
+      "个", "颗", "枚", "盒", "片", "根", "瓣", "勺", "汤匙", "茶匙",
+      "包", "罐", "碗", "杯", "块", "小块", "只", "条", "把", "株", "张",
+      "份", "人份", "滴", "段", "粒", "棵", "朵", "叶", "袋", "圈", "撮",
+      "节", "倍", "瓶",
+    ]);
+    const unsafeSuffix = /(?:左右|上下|以上|以下|或更多|最佳|大?约|约等(?:于)?)\s*[。.]?$/;
     const violations = recipes.flatMap((recipe) => recipe.ingredients
-      .filter((ingredient) => ingredient.amountValue !== null && (
-        isUnsafeAmountExpression(`${ingredient.ingredientName} ${ingredient.amountText}`)
-        || /\d/.test(ingredient.note ?? "")
-      ))
+      .filter((ingredient) => {
+        if (ingredient.amountValue === null) return false;
+        const numbers = ingredient.amountText.match(/\d+(?:\.\d+)?/g) ?? [];
+        return !ingredient.amountUnit
+          || !allowedUnits.has(ingredient.amountUnit)
+          || unsafeSuffix.test(ingredient.amountText)
+          || numbers.length > 1
+          || /[+*×]|\/\s*人|每(?:人|颗|份)|份数/.test(ingredient.amountText)
+          || /\d/.test(ingredient.note ?? "");
+      })
       .map((ingredient) => ({ sourcePath: recipe.sourcePath, ingredient })));
 
     expect(violations).toEqual([]);
