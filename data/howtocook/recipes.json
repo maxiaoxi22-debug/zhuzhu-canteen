@@ -1331,10 +1331,10 @@
         "note": null
       },
       {
-        "ingredientName": "酱油 每个生蚝",
-        "amountValue": 1,
-        "amountUnit": "ml",
-        "amountText": "1ml",
+        "ingredientName": "酱油",
+        "amountValue": null,
+        "amountUnit": null,
+        "amountText": "每个生蚝 1 ml",
         "optional": false,
         "note": null
       }
@@ -1366,7 +1366,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "8852b0f806129880f542d9361c808f0ae89c8119a07498e5bea1de87ebd7a2d1"
+    "contentHash": "161113ab04a8f6654fedbf08a1396df158e63c042ecb9d8a0273f8867c6fd59b"
   },
   {
     "id": "471af448-63f6-5c8d-9826-5795b400d3e3",
@@ -4280,7 +4280,7 @@
         "note": null
       },
       {
-        "ingredientName": "盐的用量为",
+        "ingredientName": "盐的",
         "amountValue": null,
         "amountUnit": null,
         "amountText": "1 g 每个鸡蛋。",
@@ -4288,7 +4288,7 @@
         "note": null
       },
       {
-        "ingredientName": "油的用量为",
+        "ingredientName": "油的",
         "amountValue": null,
         "amountUnit": null,
         "amountText": "5 mL 每个鸡蛋。",
@@ -4335,7 +4335,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "19a8a739e6a1a33b861b89fa67718cde6197b13271685f10a0db33f31b9df818"
+    "contentHash": "d443f56208fc63db342899090885f35fdfbd1665ed8731f8b6f99903eb6a7294"
   },
   {
     "id": "049233fc-d67f-5a91-8b58-c03edfae4f8b",
@@ -6416,10 +6416,10 @@
         "note": "可选"
       },
       {
-        "ingredientName": "其他配料：八角(",
+        "ingredientName": "其他配料",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "1)、花椒（20-50 粒都可，看个人口味）、香叶（2-3 片）、白芷（2-3 片）、姜片（大拇指粗细的姜切片）",
+        "amountText": "八角(1)、花椒（20-50 粒都可，看个人口味）、香叶（2-3 片）、白芷（2-3 片）、姜片（大拇指粗细的姜切片）",
         "optional": true,
         "note": "可选"
       },
@@ -6487,7 +6487,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "a192b92aa001d6de437be372b9e84b4a3c24e9cc74616811276157b89a36aaf5"
+    "contentHash": "d7a0329b4cbda00c63fc2d6f6c98ebef095103409c0af76e36f0b5d97382261f"
   },
   {
     "id": "f2d6c7fd-37c7-5012-9feb-83ef39b7b3af",
@@ -10879,10 +10879,10 @@
         "note": null
       },
       {
-        "ingredientName": "1 : 1 蔗糖糖浆 10 克",
+        "ingredientName": "1",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "1 : 1 蔗糖糖浆 10 克",
+        "amountText": "1 蔗糖糖浆 10 克",
         "optional": true,
         "note": "可选"
       }
@@ -10934,7 +10934,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "4149ee6bd58b10a46ee730ac97adf46d34d2b6a4e00e3e680d6bc31779c78ddd"
+    "contentHash": "2640b9e89991d93f17692bbaacc6315baf1b643d3e056a4c6200c14c0818c26b"
   },
   {
     "id": "f4cba915-e79d-5a41-a31e-72bf94d9ccb7",
@@ -11501,10 +11501,10 @@
         "note": null
       },
       {
-        "ingredientName": "1 : 1 蔗糖糖浆 30~40 克",
+        "ingredientName": "1",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "1 : 1 蔗糖糖浆 30~40 克",
+        "amountText": "1 蔗糖糖浆 30~40 克",
         "optional": false,
         "note": null
       },
@@ -11576,7 +11576,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "1f6ba7ef9216c0b78c03413a82b6764a474f4fe3591f1bcb625b97fabe7cb96f"
+    "contentHash": "3f5fca551dc396e31254a7b0fcaced468e0e0edaa2a8a0e67ada37b6e2ebe740"
   },
   {
     "id": "3a40ec84-8f86-50e3-bd01-43becf460ee0",
@@ -13626,10 +13626,10 @@
         "note": null
       },
       {
-        "ingredientName": "摊鸡蛋皮:一张",
+        "ingredientName": "摊鸡蛋皮",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "约 15 克",
+        "amountText": "一张约 15 克",
         "optional": false,
         "note": null
       },
@@ -13689,7 +13689,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "2614e347d004cb0d369d224bfbbd024dd2523fd1b68544dfdb5c1abff1918a70"
+    "contentHash": "6420110219597042e6c7bf7dc8ff5cde6ad5f7f42b4f6109607cdf14d4d8c725"
   },
   {
     "id": "069b59f9-0da2-598d-b33d-a8e2ee152c4a",
@@ -17225,10 +17225,10 @@
         "note": null
       },
       {
-        "ingredientName": "土豆",
+        "ingredientName": "土豆 2 个适中大小",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "2 个适中大小：750g",
+        "amountText": "750g",
         "optional": false,
         "note": null
       },
@@ -17324,7 +17324,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "22b2d904e68f0231500fd205f5f2233571b6b877f043bd330e3aa053cfc3e302"
+    "contentHash": "deb2cd593e922dd892b80ed02eea0d1d5c9e290925ec72f990781c71de813241"
   },
   {
     "id": "e91bf083-47e4-5b11-9c38-37d1126dfed7",
@@ -17679,10 +17679,10 @@
         "note": null
       },
       {
-        "ingredientName": "蘸料：辣椒油",
+        "ingredientName": "蘸料",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "5 克、生抽 10 克、蒜蓉 5 克、香油 2 克。",
+        "amountText": "辣椒油 5 克、生抽 10 克、蒜蓉 5 克、香油 2 克。",
         "optional": false,
         "note": null
       }
@@ -17734,7 +17734,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "80d1b518757dbed0b069382e5ed59ea6b887bc930514729afc103deb41103c25"
+    "contentHash": "167a006f87c65ac72cf3f5aa2055df546d8426cd708e13aaf297cd826ddd79a4"
   },
   {
     "id": "0505a95e-8e08-5095-8d4f-2c2a8c1b0d07",
@@ -20280,26 +20280,26 @@
     "imageUrl": null,
     "ingredients": [
       {
-        "ingredientName": "主料:猪皮",
+        "ingredientName": "主料",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "1kg、水 4kg",
+        "amountText": "猪皮 1kg、水 4kg",
         "optional": false,
         "note": null
       },
       {
-        "ingredientName": "调料：盐",
+        "ingredientName": "调料",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "13g、味精 10g、鸡精 15g、生抽 50ml、老抽 20ml、葱 10g、葱 10g、姜片 20g",
+        "amountText": "盐 13g、味精 10g、鸡精 15g、生抽 50ml、老抽 20ml、葱 10g、葱 10g、姜片 20g",
         "optional": false,
         "note": null
       },
       {
-        "ingredientName": "香料包：八角",
+        "ingredientName": "香料包",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "10g、花椒 5g",
+        "amountText": "八角 10g、花椒 5g",
         "optional": false,
         "note": null
       }
@@ -20331,7 +20331,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "68bd2c8ec4c88daa276f4866a94422817f6090432c8f642120b4c4c38ddff3ef"
+    "contentHash": "4faedc49adbb919a2f70d85b982c17641cf039b06016fc3470446ccb026d6523"
   },
   {
     "id": "d219cbe7-731f-5e38-a8a5-ec508e9f9f62",
@@ -22092,10 +22092,10 @@
         "note": null
       },
       {
-        "ingredientName": "料酒：总量",
+        "ingredientName": "料酒",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "30ml（其中 20ml 用于前期焯水去腥，10ml 用于后期炖煮提鲜）",
+        "amountText": "总量 30ml（其中 20ml 用于前期焯水去腥，10ml 用于后期炖煮提鲜）",
         "optional": false,
         "note": null
       },
@@ -22219,7 +22219,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "941e74825e1de9438f7fda5e967a0afa0263defb7c4effe4e13041b249f09bef"
+    "contentHash": "5b465a0a1fa3945a0f0e493d28099eaa469c06ceacbadd94342fa426fa693824"
   },
   {
     "id": "f7279a4a-4298-549f-bc96-982a64b4c436",
@@ -22285,10 +22285,10 @@
         "note": null
       },
       {
-        "ingredientName": "开水：没过食材的量，需要",
+        "ingredientName": "开水",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "600ml-900ml",
+        "amountText": "没过食材的量，需要 600ml-900ml",
         "optional": false,
         "note": null
       },
@@ -22424,7 +22424,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "2056ea4a3f0f619f8013c2c4589fc8105cfce93fbfaf9780819845831620be93"
+    "contentHash": "9c863addc8f6e2c0e95c52a9c944d2652952318255fe7dda9e2b86d024348cea"
   },
   {
     "id": "74d6cb66-a73b-5935-9be5-1345265b13a7",
@@ -22977,10 +22977,10 @@
         "note": null
       },
       {
-        "ingredientName": "方法二：土豆淀粉",
+        "ingredientName": "方法二",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "210g 和 中筋面粉 70g",
+        "amountText": "土豆淀粉 210g 和 中筋面粉 70g",
         "optional": false,
         "note": null
       },
@@ -23156,7 +23156,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "7f52ab2d02d6256c352f6cbb5fd301bcdfb605acb035b8c51f4a080c783a769f"
+    "contentHash": "24c5e8103cc86fca346814dfb06dfb4a1de6fa931839f9b44c86efb6843567c5"
   },
   {
     "id": "a3b240a9-7328-5951-b198-0a87035d921b",
@@ -30609,10 +30609,10 @@
         "note": null
       },
       {
-        "ingredientName": "中断大火加热的最晚时间 T",
+        "ingredientName": "中断大火加热的最晚时间 T1",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "1：1.5  分钟/500ml * 水体积",
+        "amountText": "1.5  分钟/500ml * 水体积",
         "optional": false,
         "note": null
       },
@@ -30668,7 +30668,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "f11c0546027b2ba44dccb09560f99bb06dd30d399fbb748a1afc8eb24071bdbe"
+    "contentHash": "0ac88821edc66e4c505d97933700fab78c2850a7e24a0d278af416384615a05e"
   },
   {
     "id": "511a6a96-e187-5bb5-96e4-16520ee8b861",
@@ -34568,18 +34568,18 @@
     "imageUrl": null,
     "ingredients": [
       {
-        "ingredientName": "面类材料：单人一个方便面大小的量，可以在",
+        "ingredientName": "面类材料",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "70-230g 之间选择。",
+        "amountText": "单人一个方便面大小的量，可以在 70-230g 之间选择。",
         "optional": false,
         "note": null
       },
       {
-        "ingredientName": "冷水： 加入能浸没面的量，一般在",
+        "ingredientName": "冷水",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "200 - 400 ml 之间选择",
+        "amountText": "加入能浸没面的量，一般在 200 - 400 ml 之间选择",
         "optional": false,
         "note": null
       },
@@ -34631,7 +34631,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "30b3d15e636e25203201994043a21eeaed25a99577cfe808b70c70ee9ec1ba37"
+    "contentHash": "4a56081fec637cfbe4038fabf58126f5c19fd2ec0353daa9065476e0a5e67f39"
   },
   {
     "id": "1806d90e-d069-5809-9f9c-fd01277dd151",
@@ -35459,18 +35459,18 @@
         "note": null
       },
       {
-        "ingredientName": "淀粉可准备每",
+        "ingredientName": "淀粉可准备",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "100g 肉+5g 淀粉比例准备。",
+        "amountText": "每 100g 肉+5g 淀粉比例准备。",
         "optional": false,
         "note": null
       },
       {
-        "ingredientName": "老抽/生抽，分别为每",
+        "ingredientName": "老抽/生抽，分别为",
         "amountValue": null,
         "amountUnit": null,
-        "amountText": "250g 河粉 10ml/15ml。",
+        "amountText": "每 250g 河粉 10ml/15ml。",
         "optional": false,
         "note": null
       }
@@ -35546,7 +35546,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "09fb7026fb7acf4a7f23b1c14d5f4bfa9b6e7db7a21981418dfc00aa4d23c643"
+    "contentHash": "e0328032a10f0346f79fc8c50f315660bb06296548d28322d71cb537a9741110"
   },
   {
     "id": "4e314c1d-30f6-52ad-9610-847a8da63baf",
@@ -36650,10 +36650,10 @@
         "note": null
       },
       {
-        "ingredientName": "水：米的体积",
-        "amountValue": 2,
-        "amountUnit": "倍",
-        "amountText": "2 倍",
+        "ingredientName": "水",
+        "amountValue": null,
+        "amountUnit": null,
+        "amountText": "米的体积的 2 倍",
         "optional": false,
         "note": null
       }
@@ -36689,7 +36689,7 @@
       }
     ],
     "aliases": [],
-    "contentHash": "a56bb7e47c8d0dee44eb1ba1f8ee736a168acaa4be14ff166aeacbdef63bea19"
+    "contentHash": "e8f463816f68be7946369e82a76305a3ee0709597e846f9873b66a0afed8cc8f"
   },
   {
     "id": "308c7454-6f2c-543c-9382-6edbbc5dbe99",

@@ -119,13 +119,13 @@ const SAFE_AMOUNT_UNITS = new Set([
   "个", "颗", "枚", "盒", "片", "根", "瓣", "勺", "汤匙", "茶匙",
   "包", "罐", "碗", "杯", "块", "小块", "只", "条", "把", "株", "张",
   "份", "人份", "滴", "段", "粒", "棵", "朵", "叶", "袋", "圈", "撮",
-  "节", "倍", "瓶",
+  "节", "瓶",
 ]);
 
 function isUnsafeAmountExpression(value: string): boolean {
   if (numberCount(value) > 1) return true;
   if (/[+*×]/.test(value)) return true;
-  if (/(?:\/\s*人|每(?:人|颗|份)|份数)/.test(value)) return true;
+  if (/(?:\/\s*人|每|份数)/.test(value)) return true;
   if (/\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*\s*(?:-|–|—|~|～|至|到|\/)\s*\d/u.test(value)) return true;
   if (/(?:大约|约|左右|至少|最多)\s*\d/.test(value)) return true;
   return /\d[^\n]*(?:左右|上下|以上|以下|或更多|最佳|大?约|约等(?:于)?)\s*[。.]?$/.test(value);
@@ -140,6 +140,23 @@ function cleanIngredientName(value: string): string {
 }
 
 function splitIngredientAndAmount(value: string): { ingredientName: string; amountText: string } {
+  const colonRelative = value.match(/^([^：:]+)[：:]\s*(.+\d.+)$/u);
+  if (colonRelative) {
+    return {
+      ingredientName: cleanIngredientName(colonRelative[1]),
+      amountText: colonRelative[2].trim(),
+    };
+  }
+
+  const perIndex = value.indexOf("每");
+  const firstNumberIndex = value.search(/\d/);
+  if (perIndex > 0 && firstNumberIndex > perIndex) {
+    return {
+      ingredientName: cleanIngredientName(value.slice(0, perIndex)),
+      amountText: value.slice(perIndex).trim(),
+    };
+  }
+
   const numeric = value.match(/\d+(?:\.\d+)?/);
   if (numeric?.index !== undefined) {
     const prefix = value.slice(0, numeric.index);

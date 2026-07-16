@@ -194,6 +194,8 @@ describe("HowToCook markdown parser", () => {
       ["黄油 20g约", "黄油", "20g约"],
       ["糖 10g约等于", "糖", "10g约等于"],
       ["香料（2 把香菜）", "香料", "（2 把香菜）"],
+      ["酱油 每个生蚝 1 ml", "酱油", "每个生蚝 1 ml"],
+      ["水：米的体积的 2 倍", "水", "米的体积的 2 倍"],
     ] as const;
     const markdown = fixture.replace(
       /每份：[\s\S]*?(?=\n## 操作)/,
@@ -312,18 +314,19 @@ describe("HowToCook staging", () => {
       "个", "颗", "枚", "盒", "片", "根", "瓣", "勺", "汤匙", "茶匙",
       "包", "罐", "碗", "杯", "块", "小块", "只", "条", "把", "株", "张",
       "份", "人份", "滴", "段", "粒", "棵", "朵", "叶", "袋", "圈", "撮",
-      "节", "倍", "瓶",
+      "节", "瓶",
     ]);
     const unsafeSuffix = /(?:左右|上下|以上|以下|或更多|最佳|大?约|约等(?:于)?)\s*[。.]?$/;
     const violations = recipes.flatMap((recipe) => recipe.ingredients
       .filter((ingredient) => {
         if (ingredient.amountValue === null) return false;
+        const expression = `${ingredient.ingredientName} ${ingredient.amountText}`;
         const numbers = ingredient.amountText.match(/\d+(?:\.\d+)?/g) ?? [];
         return !ingredient.amountUnit
           || !allowedUnits.has(ingredient.amountUnit)
           || unsafeSuffix.test(ingredient.amountText)
           || numbers.length > 1
-          || /[+*×]|\/\s*人|每(?:人|颗|份)|份数/.test(ingredient.amountText)
+          || /[+*×]|\/\s*人|每|份数/.test(expression)
           || /\d/.test(ingredient.note ?? "");
       })
       .map((ingredient) => ({ sourcePath: recipe.sourcePath, ingredient })));
