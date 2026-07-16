@@ -73,14 +73,30 @@ export interface WishlistRecommendation extends RecommendationBase {
 
 export type RecommendationItem = DishRecommendation | WishlistRecommendation;
 
-export interface HistoryEvent {
+interface HistoryEventBase {
   id: string;
-  type: "dish_created" | "meal_planned";
   eventTime: string;
   date: string;
-  mealType?: string;
+}
+
+export interface DishCreatedHistoryEvent extends HistoryEventBase {
+  type: "dish_created";
   dish: Dish;
 }
+
+export interface MealPlannedHistoryEvent extends HistoryEventBase {
+  type: "meal_planned";
+  mealType: string;
+  dish: Dish;
+}
+
+export interface WishlistCompletedHistoryEvent extends HistoryEventBase {
+  type: "wishlist_completed";
+  nameSnapshot: string;
+  imageUrlSnapshot: string | null;
+}
+
+export type HistoryEvent = DishCreatedHistoryEvent | MealPlannedHistoryEvent | WishlistCompletedHistoryEvent;
 
 export interface HistoryFrequency {
   id: string;
@@ -92,6 +108,7 @@ export interface HistoryFrequency {
 export interface HistoryData {
   events: HistoryEvent[];
   frequency: HistoryFrequency[];
+  wishlistSummary: { pending: number; completed: number };
 }
 
 export interface CategoryAchievement {

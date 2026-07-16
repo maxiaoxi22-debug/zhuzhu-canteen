@@ -1,17 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { mealPlans, dishes } from "@/db/schema";
-import { desc } from "drizzle-orm";
-import { buildHistoryData } from "@/lib/history-data";
+import { NextResponse } from "next/server";
+import { desc, eq } from "drizzle-orm";
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const limit = parseInt(searchParams.get("limit") || "50");
+import { db, type createDatabase } from "../../../db";
+import { dishes, mealPlans, wishlistCompletions, wishlistItems } from "../../../db/schema";
+import { buildHistoryData } from "../../../lib/history-data";
+import { buildWishlistSummary } from "../../../lib/history-stats";
 
-  const [plans, allDishes] = await Promise.all([
-    db.select().from(mealPlans).orderBy(desc(mealPlans.date), desc(mealPlans.mealType)).limit(limit),
-    db.select().from(dishes),
-  ]);
+type HistoryDatabase = ReturnType<typeof createDatabase>;
 
-  return NextResponse.json(buildHistoryData(plans, allDishes, limit));
+export function createHistoryHandler(database: HistoryDatabase) {
+  return async function GET(request: Request): Promise<Response> {
+    const requestedLimit = Number.parseInt(new URL(request.url).searchParams.get("limit") || "50", 10);
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 50;
+
+    const [plans, allDishes, pendingRows, completions] = await Promise.all([
+      database.select().from(mealPlans).orderBy(desc(mealPlans.date), desc(mealPlans.mealType)).limit(limit),
+      database.select().from(dishes),
+      database.select({ id: wishlistItems.id }).from(wishlistItems).where(eq(wishlistItems.status, "pending")),
+      database.select().from(wishlistCompletions).orderBy(desc(wishlistCompletions.completedAt)),
+    ]);
+
+    return NextResponse.json(buildHistoryData(
+      plans,
+      allDishes,
+      limit,
+      completions,
+      buildWishlistSummary(pendingRows, completions),
+    ));
+  };
 }
+
+export const GET = createHistoryHandler(db);

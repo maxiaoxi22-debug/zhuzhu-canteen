@@ -19,10 +19,12 @@ function formatEventDate(date: string, today: string): string {
 export default function HistoryPage(props: {
   events: HistoryEvent[];
   frequency: HistoryFrequency[];
+  wishlistSummary: { pending: number; completed: number };
   loading: boolean;
   onDishClick: (dish: Dish) => void;
+  onOpenWishlist: () => void;
 }) {
-  const { events, loading, onDishClick } = props;
+  const { events, wishlistSummary, loading, onDishClick, onOpenWishlist } = props;
   const today = getLocalDateKey();
   const stats = buildHistoryStats(events, today);
   const maxCategory = Math.max(1, ...stats.categories.map((category) => category.times));
@@ -45,6 +47,11 @@ export default function HistoryPage(props: {
         <div className="surface-card rounded-[1.05rem] px-3.5 py-3"><strong className="block text-lg">{stats.unlockedCategories} 类</strong><span className="text-[.65rem] text-[var(--muted)]">食物已解锁</span></div>
       </div>
 
+      <button onClick={onOpenWishlist} className="surface-card mt-2.5 flex min-h-11 w-full items-center justify-between rounded-[1.05rem] px-3.5 py-2.5 text-left transition active:scale-[.98]">
+        <strong className="text-xs">{wishlistSummary.pending} 个心愿待完成</strong>
+        <span className="text-[.65rem] text-[var(--muted)]">已完成 {wishlistSummary.completed} 个 · 去看看</span>
+      </button>
+
       <div className="section-head"><h2>六类食物成就</h2><span>按本月真实菜单</span></div>
       <div className="grid gap-2">
         {stats.categories.map((category) => (
@@ -66,8 +73,19 @@ export default function HistoryPage(props: {
       ) : (
         <div className="grid gap-2">
           {events.map((event) => {
+            if (event.type === "wishlist_completed") {
+              return (
+                <button key={event.id} onClick={onOpenWishlist} className="surface-card grid min-h-11 w-full grid-cols-[2.2rem_1fr_auto] items-center gap-2.5 rounded-[1.05rem] p-2.5 text-left transition active:scale-[.98]">
+                  <span className="category-icon h-9 w-9 bg-[#fff0dc] text-lg">✨</span>
+                  <span className="min-w-0"><b className="block truncate text-xs">完成心愿：{event.nameSnapshot}</b><small className="text-[.58rem] text-[var(--muted)]">心愿成就 +1</small></span>
+                  <span className="text-[.58rem] text-[var(--muted)]">{formatEventDate(event.date, today)}</span>
+                </button>
+              );
+            }
             const meta = getCategoryMeta(event.dish.categoryId);
-            const mealLabel = event.mealType === "breakfast" ? "早餐" : event.mealType === "lunch" ? "午餐" : "晚餐";
+            const mealLabel = event.type === "meal_planned"
+              ? event.mealType === "breakfast" ? "早餐" : event.mealType === "lunch" ? "午餐" : "晚餐"
+              : "";
             return (
               <button key={event.id} onClick={() => onDishClick(event.dish)} className="surface-card grid w-full grid-cols-[2.2rem_1fr_auto] items-center gap-2.5 rounded-[1.05rem] p-2.5 text-left transition active:scale-[.98]">
                 <span className={`category-icon ${meta.className} h-9 w-9 text-lg`}>{meta.icon}</span>

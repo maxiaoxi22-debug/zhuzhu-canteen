@@ -35,7 +35,11 @@ export default function Home() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [toast, setToast] = useState("");
-  const [historyData, setHistoryData] = useState<HistoryData>({ events: [], frequency: [] });
+  const [historyData, setHistoryData] = useState<HistoryData>({
+    events: [],
+    frequency: [],
+    wishlistSummary: { pending: 0, completed: 0 },
+  });
   const [historyLoading, setHistoryLoading] = useState(true);
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
   const [wishlistCount, setWishlistCount] = useState(0);
@@ -58,7 +62,11 @@ export default function Home() {
     try {
       const response = await fetch("/api/history");
       const data = await response.json();
-      if (response.ok) setHistoryData({ events: data.events || [], frequency: data.frequency || [] });
+      if (response.ok) setHistoryData({
+        events: data.events || [],
+        frequency: data.frequency || [],
+        wishlistSummary: data.wishlistSummary || { pending: 0, completed: 0 },
+      });
     } catch {
       // Keep the last successful history snapshot when the network is temporarily unavailable.
     } finally {
@@ -165,7 +173,7 @@ export default function Home() {
         <TodayPage dishes={dishes} onDishClick={setSelectedDish} onRecipeClick={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "today" })} refresh={refresh} recommendationRevision={refreshKey} wishlistCount={wishlistCount} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
       )}
       {tab === "history" && (
-        <HistoryPage events={historyData.events} frequency={historyData.frequency} loading={historyLoading} onDishClick={setSelectedDish} />
+        <HistoryPage events={historyData.events} frequency={historyData.frequency} wishlistSummary={historyData.wishlistSummary} loading={historyLoading} onDishClick={setSelectedDish} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
       )}
 
       <TabBar active={tab} onTabChange={setTab} />

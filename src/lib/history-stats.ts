@@ -1,6 +1,13 @@
 import { CATEGORY_META, getCategoryMeta } from "./categories";
 import { HistoryEvent, HistoryStats } from "./types";
 
+export function buildWishlistSummary(
+  pendingRows: readonly unknown[],
+  completionRows: readonly unknown[],
+): { pending: number; completed: number } {
+  return { pending: pendingRows.length, completed: completionRows.length };
+}
+
 function shiftDate(dateKey: string, days: number): string {
   const date = new Date(`${dateKey}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);

@@ -39,4 +39,21 @@ describe("history stats", () => {
     const events = [meal("1", "2026-07-14", item), meal("2", "2026-07-08", item), meal("3", "2026-07-07", item)];
     expect(buildHistoryStats(events, "2026-07-14").weekMeals).toBe(2);
   });
+
+  it("does not count wishlist completions as meals", () => {
+    const events: HistoryEvent[] = [{
+      id: "wish-completion",
+      type: "wishlist_completed",
+      eventTime: "2026-07-14T12:00:00.000Z",
+      date: "2026-07-14",
+      nameSnapshot: "糖醋排骨",
+      imageUrlSnapshot: null,
+    }];
+
+    expect(buildHistoryStats(events, "2026-07-14")).toMatchObject({
+      monthlyMeals: 0,
+      consecutiveDays: 0,
+      weekMeals: 0,
+    });
+  });
 });
