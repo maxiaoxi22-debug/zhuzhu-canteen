@@ -9,9 +9,18 @@ import HistoryPage from "@/components/HistoryPage";
 import DishDetail from "@/components/DishDetail";
 import AddDishForm from "@/components/AddDishForm";
 import DeleteDishDialog from "@/components/DeleteDishDialog";
+import WishlistPage from "@/components/WishlistPage";
+import RecipeDetail from "@/components/RecipeDetail";
+import CompletedWishlistPage from "@/components/CompletedWishlistPage";
 import { Dish, HistoryData } from "@/lib/types";
 
 export type Tab = "record" | "library" | "today" | "history";
+
+type OverlayView =
+  | { type: "wishlist" }
+  | { type: "recipe"; recipeId: string; backTo: "wishlist" | "completed" }
+  | { type: "completed" }
+  | null;
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("record");
@@ -28,6 +37,8 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [historyData, setHistoryData] = useState<HistoryData>({ events: [], frequency: [] });
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [overlayView, setOverlayView] = useState<OverlayView>(null);
+  const [wishlistCount, setWishlistCount] = useState(0);
 
   const fetchDishes = useCallback(async () => {
     setLoadError("");
@@ -55,8 +66,20 @@ export default function Home() {
     }
   }, []);
 
+  const fetchWishlistCount = useCallback(async () => {
+    try {
+      const response = await fetch("/api/wishlist?status=pending");
+      if (!response.ok) return;
+      const data = await response.json() as { pendingCount?: number };
+      setWishlistCount(data.pendingCount || 0);
+    } catch {
+      // Keep the last known badge count while the network is temporarily unavailable.
+    }
+  }, []);
+
   useEffect(() => { fetchDishes(); }, [fetchDishes, refreshKey]);
   useEffect(() => { void fetchHistory(); }, [fetchHistory]);
+  useEffect(() => { void fetchWishlistCount(); }, [fetchWishlistCount]);
 
   const refresh = () => { setRefreshKey((k) => k + 1); void fetchHistory(); };
 
@@ -111,6 +134,27 @@ export default function Home() {
   return (
     <main className="app-stage">
       <div className="app-phone">
+      {overlayView?.type === "wishlist" && (
+        <WishlistPage
+          onClose={() => { setOverlayView(null); void fetchWishlistCount(); }}
+          onOpenRecipe={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "wishlist" })}
+          onOpenCompleted={() => setOverlayView({ type: "completed" })}
+        />
+      )}
+      {overlayView?.type === "recipe" && (
+        <RecipeDetail
+          recipeId={overlayView.recipeId}
+          onBack={() => setOverlayView({ type: overlayView.backTo })}
+          onWishlistChanged={() => void fetchWishlistCount()}
+        />
+      )}
+      {overlayView?.type === "completed" && (
+        <CompletedWishlistPage
+          onClose={() => setOverlayView({ type: "wishlist" })}
+          onOpenRecipe={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "completed" })}
+        />
+      )}
+      {!overlayView && <>
       {tab === "record" && (
         <RecordPage dishes={dishes} onDishClick={setSelectedDish} onAddClick={() => setShowAddForm(true)} onEditDish={setEditingDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
@@ -118,7 +162,7 @@ export default function Home() {
         <LibraryPage dishes={dishes} onDishClick={setSelectedDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
       {tab === "today" && (
-        <TodayPage dishes={dishes} onDishClick={setSelectedDish} refresh={refresh} />
+        <TodayPage dishes={dishes} onDishClick={setSelectedDish} refresh={refresh} wishlistCount={wishlistCount} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
       )}
       {tab === "history" && (
         <HistoryPage events={historyData.events} frequency={historyData.frequency} loading={historyLoading} onDishClick={setSelectedDish} />
@@ -140,6 +184,7 @@ export default function Home() {
       )}
       {deleteTarget && <DeleteDishDialog dish={deleteTarget} deleting={deleting} error={deleteError} onCancel={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(""); } }} onConfirm={confirmDelete} />}
       {toast && <div className="fixed left-1/2 top-6 z-[60] -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">{toast}</div>}
+      </>}
       </div>
     </main>
   );

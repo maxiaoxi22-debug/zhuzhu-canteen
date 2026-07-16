@@ -50,6 +50,10 @@ button:focus-visible { outline: 3px solid rgba(239, 104, 101, .35); outline-offs
 .section-head h2 { margin: 0; color: var(--cocoa); font-size: 1rem; font-weight: 800; }
 .section-head span { color: var(--muted); font-size: .7rem; }
 .surface-card { border: 1px solid var(--line); background: var(--paper); box-shadow: 0 5px 16px rgba(96, 61, 48, .05); }
+.wishlist-overlay { position: relative; z-index: 30; background: var(--cream); padding-bottom: calc(2.5rem + env(safe-area-inset-bottom)); }
+.overlay-back-button { display: grid; width: 2.75rem; height: 2.75rem; flex: 0 0 auto; place-items: center; border-radius: .8rem; background: #fff0eb; color: var(--coral-dark); font-size: 1.8rem; line-height: 1; }
+.overlay-dialog-card { position: fixed; inset: auto 1rem calc(1rem + env(safe-area-inset-bottom)); width: min(calc(100% - 2rem), 398px); margin: auto; border: 0; border-radius: 1.5rem; background: var(--paper); color: var(--cocoa); padding: 1.25rem; text-align: center; box-shadow: var(--shadow); }
+.overlay-dialog-card::backdrop { background: rgba(51, 35, 30, .38); }
 .category-icon { display: grid; place-items: center; border-radius: .9rem; }
 .category-meat { background: #ffebe5; }
 .category-veg { background: #eaf6e4; }

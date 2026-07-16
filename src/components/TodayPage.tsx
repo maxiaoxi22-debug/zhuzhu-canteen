@@ -10,8 +10,8 @@ import { getCategoryMeta } from "@/lib/categories";
 import { getLocalDateKey } from "@/lib/satiety";
 
 export default function TodayPage({
-  dishes, onDishClick, refresh,
-}: { dishes: Dish[]; onDishClick: (d: Dish) => void; refresh: () => void }) {
+  dishes, onDishClick, refresh, wishlistCount, onOpenWishlist,
+}: { dishes: Dish[]; onDishClick: (d: Dish) => void; refresh: () => void; wishlistCount: number; onOpenWishlist: () => void }) {
   const [randCat, setRandCat] = useState("all");
   const [randDish, setRandDish] = useState<Dish | null>(null);
   const [todayPlans, setTodayPlans] = useState<MealPlan[]>([]);
@@ -93,7 +93,14 @@ export default function TodayPage({
   return (
     <div className={PAGE_CONTENT_CLASS}>
       <p className="page-kicker">让猪猪帮你决定</p>
-      <h1 className="page-title">今天吃点啥？</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="page-title">今天吃点啥？</h1>
+        <button type="button" onClick={onOpenWishlist} aria-label="打开猪猪心愿单" className="relative grid min-h-11 min-w-11 place-items-center rounded-xl bg-[#fff0eb] text-xl text-[var(--coral-dark)]">
+          ♥
+          {wishlistCount > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-[var(--coral)] px-1 text-[.62rem] font-extrabold leading-none text-white">{wishlistCount > 99 ? "99+" : wishlistCount}</span>}
+        </button>
+        <span className="sr-only" role="status">{wishlistCount > 0 ? `${wishlistCount} 个待完成心愿` : "暂无待完成心愿"}</span>
+      </div>
 
       <div className="scrollbar-hide -mx-[1.125rem] mt-3 flex gap-2 overflow-x-auto px-[1.125rem] pb-1">
         {CATEGORIES.map((category) => (
