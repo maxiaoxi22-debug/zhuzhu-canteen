@@ -35,8 +35,8 @@ interface RateLimiter {
 interface ReservationStore {
   create(input: { id: string; imageUrl: string; now: number; expiresAt: number }): Promise<void>;
   acquire(input: { id: string; imageUrl: string; now: number }): Promise<"acquired" | "temp" | "claimed" | "deleting" | "missing">;
-  finish(id: string): Promise<void>;
-  restore(id: string, now: number): Promise<void>;
+  finish(id: string, leaseAcquiredAt: number): Promise<boolean>;
+  restore(id: string, leaseAcquiredAt: number, now: number): Promise<boolean>;
 }
 
 interface UploadHandlerOptions {
@@ -54,8 +54,8 @@ const defaultLimiter: RateLimiter = {
 const defaultReservations: ReservationStore = {
   create: (input) => createPhotoUploadReservation(db, input),
   acquire: (input) => acquirePhotoUploadForCleanup(db, input),
-  finish: (id) => finishPhotoUploadCleanup(db, id),
-  restore: (id, now) => restorePhotoUploadAfterCleanupFailure(db, id, now),
+  finish: (id, leaseAcquiredAt) => finishPhotoUploadCleanup(db, id, leaseAcquiredAt),
+  restore: (id, leaseAcquiredAt, now) => restorePhotoUploadAfterCleanupFailure(db, id, leaseAcquiredAt, now),
 };
 
 export function createDishPhotoUploadHandlers(
@@ -161,12 +161,14 @@ export function createDishPhotoUploadHandlers(
     try {
       await remove(payload.imageUrl);
     } catch {
-      await reservations.restore(payload.reservationId, now()).catch(() => undefined);
+      await reservations.restore(payload.reservationId, checkedAt, now()).catch(() => undefined);
       console.error("Unassociated dish photo cleanup failed");
       return NextResponse.json({ error: "照片清理失败，请稍后重试" }, { status: 502 });
     }
     try {
-      await reservations.finish(payload.reservationId);
+      if (!(await reservations.finish(payload.reservationId, checkedAt))) {
+        return NextResponse.json({ error: "照片已清理，状态已由其他任务接管" }, { status: 409 });
+      }
       return NextResponse.json({ success: true });
     } catch {
       console.error("Deleted dish photo reservation finalization failed");

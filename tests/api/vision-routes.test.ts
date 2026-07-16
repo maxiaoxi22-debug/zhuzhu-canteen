@@ -22,8 +22,8 @@ function reservationStore(overrides: Record<string, unknown> = {}) {
   return {
     create: vi.fn().mockResolvedValue(undefined),
     acquire: vi.fn().mockResolvedValue("acquired"),
-    finish: vi.fn().mockResolvedValue(undefined),
-    restore: vi.fn().mockResolvedValue(undefined),
+    finish: vi.fn().mockResolvedValue(true),
+    restore: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -196,7 +196,11 @@ describe("DELETE /api/uploads/dish-photo", () => {
     const response = await handlers.DELETE(deleteRequest(token));
 
     expect(response.status).toBe(502);
-    expect(reservations.restore).toHaveBeenCalledWith("upload-retry", expect.any(Number));
+    expect(reservations.restore).toHaveBeenCalledWith(
+      "upload-retry",
+      expect.any(Number),
+      expect.any(Number),
+    );
     expect(reservations.finish).not.toHaveBeenCalled();
   });
 

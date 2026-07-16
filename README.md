@@ -11,9 +11,22 @@
 - `TURSO_DATABASE_URL`：Turso 数据库地址。
 - `TURSO_AUTH_TOKEN`：Turso 访问令牌。
 - `BLOB_READ_WRITE_TOKEN`：Vercel Blob 上传与删除令牌。
+- `CRON_SECRET`：保护 Vercel 每日照片清理任务的随机长密钥；请单独生成，不要复用其他令牌。
 - `GEMINI_API_KEY`：公网 AI 菜名识别密钥；缺失或失效时仍可手动填写菜名保存。
 
 部署到 Vercel 时，在项目的 Environment Variables 中配置同名变量，不要把真实值提交到 Git。生产环境不设置 `VISION_PROVIDER=ollama`。
+
+## 临时照片清理
+
+照片上传后会先保存为临时预留记录。Vercel 每天调用 `/api/cron/photo-uploads`，使用 `CRON_SECRET` 授权并回收已过期、尚未保存到饭盆的照片。清理失败的记录保持不可保存状态，后续任务会安全重试，不会误删已经保存的照片。
+
+需要手工补跑时，确认 `.env.local` 指向目标数据库并包含有效的 `BLOB_READ_WRITE_TOKEN`，然后执行：
+
+```bash
+npm run uploads:sweep
+```
+
+当前已知限制：编辑菜品更换照片后，旧 Blob 不在本轮自动回收范围；远程 Turso 短暂不可用时，本次清理会失败并由下次定时任务或手工命令重试。
 
 ## 数据边界
 
