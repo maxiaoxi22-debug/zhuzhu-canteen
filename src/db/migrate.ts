@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS wishlist_completions (
   name_snapshot text NOT NULL, image_url_snapshot text, created_at text NOT NULL
 );
 CREATE INDEX IF NOT EXISTS wishlist_completion_time_idx ON wishlist_completions(completed_at DESC);
+CREATE TABLE IF NOT EXISTS dish_photo_uploads (
+  id text PRIMARY KEY, image_url text NOT NULL UNIQUE,
+  status text NOT NULL CHECK(status IN ('temp','deleting','claimed')),
+  claimed_dish_id text REFERENCES dishes(id) ON DELETE SET NULL,
+  expires_at integer NOT NULL, created_at text NOT NULL, updated_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS dish_photo_uploads_status_expiry_idx
+  ON dish_photo_uploads(status, expires_at);
+CREATE TABLE IF NOT EXISTS api_rate_limits (
+  key text PRIMARY KEY, window_started_at integer NOT NULL,
+  count integer NOT NULL, expires_at integer NOT NULL
+);
+CREATE INDEX IF NOT EXISTS api_rate_limits_expiry_idx ON api_rate_limits(expires_at);
 `;
 
 const LEGACY_COLUMNS = [

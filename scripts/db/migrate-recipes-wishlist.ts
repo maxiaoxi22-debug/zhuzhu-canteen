@@ -12,6 +12,8 @@ const PLANNED_TABLES = [
   "recipe_aliases",
   "wishlist_items",
   "wishlist_completions",
+  "dish_photo_uploads",
+  "api_rate_limits",
 ];
 
 const PLANNED_COLUMNS = [

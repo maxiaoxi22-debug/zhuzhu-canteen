@@ -55,6 +55,7 @@ describe("recipes and wishlist migration", () => {
     const tables = await client.execute("SELECT name FROM sqlite_master WHERE type='table'");
     expect(tables.rows.map((row) => row.name)).toEqual(expect.arrayContaining([
       "recipes", "recipe_ingredients", "recipe_steps", "recipe_aliases", "wishlist_items", "wishlist_completions",
+      "dish_photo_uploads", "api_rate_limits",
     ]));
     const dishColumns = await client.execute("PRAGMA table_info(dishes)");
     expect(dishColumns.rows.map((row) => row.name)).toEqual(expect.arrayContaining(["recipe_id", "wishlist_item_id", "owner_id"]));
@@ -75,6 +76,8 @@ describe("recipes and wishlist migration", () => {
       "recipe_alias_key_idx",
       "wishlist_pending_recipe_uq",
       "wishlist_completion_time_idx",
+      "dish_photo_uploads_status_expiry_idx",
+      "api_rate_limits_expiry_idx",
     ]));
     const wishlistDdl = await client.execute(
       "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wishlist_items'",
@@ -82,6 +85,7 @@ describe("recipes and wishlist migration", () => {
     expect(wishlistDdl.rows[0]?.sql).toContain("CHECK(status IN ('pending','completed'))");
     for (const table of [
       "recipes", "recipe_ingredients", "recipe_steps", "recipe_aliases", "wishlist_items", "wishlist_completions",
+      "dish_photo_uploads", "api_rate_limits",
     ]) {
       const rows = await client.execute(`SELECT * FROM ${table}`);
       expect(rows.rows).toHaveLength(0);

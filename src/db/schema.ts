@@ -123,3 +123,25 @@ export const wishlistCompletions = sqliteTable("wishlist_completions", {
 }, (table) => [
   index("wishlist_completion_time_idx").on(sql`${table.completedAt} DESC`),
 ]);
+
+export const dishPhotoUploads = sqliteTable("dish_photo_uploads", {
+  id: text("id").primaryKey(),
+  imageUrl: text("image_url").notNull().unique(),
+  status: text("status", { enum: ["temp", "deleting", "claimed"] }).notNull(),
+  claimedDishId: text("claimed_dish_id").references(() => dishes.id, { onDelete: "set null" }),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  check("dish_photo_uploads_status_check", sql`${table.status} IN ('temp','deleting','claimed')`),
+  index("dish_photo_uploads_status_expiry_idx").on(table.status, table.expiresAt),
+]);
+
+export const apiRateLimits = sqliteTable("api_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStartedAt: integer("window_started_at").notNull(),
+  count: integer("count").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+}, (table) => [
+  index("api_rate_limits_expiry_idx").on(table.expiresAt),
+]);

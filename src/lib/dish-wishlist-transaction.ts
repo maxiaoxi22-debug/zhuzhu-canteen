@@ -6,6 +6,7 @@ import type { createDatabase } from "../db";
 import { dishes, recipes, wishlistCompletions, wishlistItems } from "../db/schema";
 import { getCategoryMeta } from "./categories";
 import { findDishNameMatch, normalizeDishName } from "./dish-name-match";
+import { claimPhotoUpload } from "./photo-upload-reservation";
 
 export type DishWishlistDatabase = ReturnType<typeof createDatabase>;
 
@@ -19,6 +20,7 @@ export interface DishSaveRequest {
   wishlistItemId?: string;
   completeWishlist?: boolean;
   ownerId: string | null;
+  photoUploadId?: string;
 }
 
 export interface CompletionCandidate {
@@ -35,7 +37,7 @@ export interface DishSaveResult {
 
 export class DishTransactionError extends Error {
   constructor(
-    public code: "duplicate" | "recipe-not-found",
+    public code: "duplicate" | "recipe-not-found" | "photo-unavailable",
     message: string,
     public match?: ReturnType<typeof findDishNameMatch>,
   ) {
@@ -110,7 +112,8 @@ export async function saveDishAndMaybeCompleteWish(
   }
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
 
   return database.transaction(async (transaction) => {
     await transaction.insert(dishes).values({
@@ -128,6 +131,17 @@ export async function saveDishAndMaybeCompleteWish(
       createdAt: now,
       updatedAt: now,
     });
+
+    if (request.photoUploadId) {
+      if (!request.imageUrl || !(await claimPhotoUpload(transaction, {
+        id: request.photoUploadId,
+        imageUrl: request.imageUrl,
+        dishId: id,
+        now: nowMs,
+      }))) {
+        throw new DishTransactionError("photo-unavailable", "照片已失效，请重新选择后保存");
+      }
+    }
 
     const completionTarget = await validateCompletionTarget(transaction, request);
     if (!completionTarget) return { id };
