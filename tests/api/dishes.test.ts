@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createDishHandlers } from "../../src/app/api/dishes/route";
 import type { DishWishlistDatabase } from "../../src/lib/dish-wishlist-transaction";
+import { createPhotoUploadReservation, acquirePhotoUploadForCleanup } from "../../src/lib/photo-upload-reservation";
+import { createUploadCleanupToken } from "../../src/lib/upload-cleanup-token";
 
 describe("Dishes API isolated handlers", () => {
   let client: Client | undefined;
@@ -35,6 +37,10 @@ describe("Dishes API isolated handlers", () => {
         completed_dish_id text, added_at_snapshot text NOT NULL, completed_at text NOT NULL,
         name_snapshot text NOT NULL, image_url_snapshot text, created_at text NOT NULL
       );
+      CREATE TABLE dish_photo_uploads (
+        id text PRIMARY KEY, image_url text NOT NULL UNIQUE, status text NOT NULL,
+        claimed_dish_id text, expires_at integer NOT NULL, created_at text NOT NULL, updated_at text NOT NULL
+      );
       INSERT INTO categories VALUES (1, '肉类');
       INSERT INTO recipes VALUES ('recipe-1', '木樨肉', '木樨肉', '肉类', 'recipe.jpg');
       INSERT INTO wishlist_items VALUES (
@@ -43,7 +49,7 @@ describe("Dishes API isolated handlers", () => {
         '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z'
       );
     `);
-    handlers = createDishHandlers(drizzle(client) as DishWishlistDatabase);
+    handlers = createDishHandlers(drizzle(client) as DishWishlistDatabase, { cleanupSecret: "test-secret" });
   });
 
   afterEach(async () => {
@@ -76,6 +82,49 @@ describe("Dishes API isolated handlers", () => {
     await expect(response.json()).resolves.toEqual({ id: expect.any(String) });
     const wish = await client!.execute("SELECT status FROM wishlist_items WHERE id='wish-1'");
     expect(wish.rows[0].status).toBe("pending");
+  });
+
+  it("claims a signed managed upload in the same transaction as a normal dish save", async () => {
+    const database = drizzle(client!) as DishWishlistDatabase;
+    const now = Date.now();
+    const imageUrl = "https://bucket.public.blob.vercel-storage.com/zhuzhu-canteen/claimed.jpg";
+    await createPhotoUploadReservation(database, {
+      id: "upload-claimed", imageUrl, now, expiresAt: now + 60_000,
+    });
+    const response = await post({
+      name: "糖醋排骨",
+      imageUrl,
+      photoUploadId: "upload-claimed",
+      photoUploadToken: createUploadCleanupToken("upload-claimed", imageUrl, "test-secret", now),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await acquirePhotoUploadForCleanup(database, {
+      id: "upload-claimed", imageUrl, now: now + 1,
+    })).toBe("claimed");
+  });
+
+  it("rejects a managed upload without its exact token and rolls back if cleanup owns it", async () => {
+    const database = drizzle(client!) as DishWishlistDatabase;
+    const now = Date.now();
+    const imageUrl = "https://bucket.public.blob.vercel-storage.com/zhuzhu-canteen/deleting.jpg";
+    await createPhotoUploadReservation(database, {
+      id: "upload-deleting", imageUrl, now, expiresAt: now + 60_000,
+    });
+    expect((await post({ name: "无凭证菜", imageUrl })).status).toBe(400);
+    expect(await acquirePhotoUploadForCleanup(database, {
+      id: "upload-deleting", imageUrl, now: now + 1,
+    })).toBe("acquired");
+    const response = await post({
+      name: "清理竞争菜",
+      imageUrl,
+      photoUploadId: "upload-deleting",
+      photoUploadToken: createUploadCleanupToken("upload-deleting", imageUrl, "test-secret", now),
+    });
+
+    expect(response.status).toBe(400);
+    const rows = await client!.execute("SELECT id FROM dishes WHERE name='清理竞争菜'");
+    expect(rows.rows).toHaveLength(0);
   });
 
   it("returns a server-owned celebration payload only after atomic completion", async () => {

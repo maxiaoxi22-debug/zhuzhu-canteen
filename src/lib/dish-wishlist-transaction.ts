@@ -7,6 +7,7 @@ import { dishes, recipes, wishlistCompletions, wishlistItems } from "../db/schem
 import { getCategoryMeta } from "./categories";
 import { findDishNameMatch, normalizeDishName } from "./dish-name-match";
 import { claimPhotoUpload } from "./photo-upload-reservation";
+import { withDatabaseBusyRetry } from "./database-retry";
 
 export type DishWishlistDatabase = ReturnType<typeof createDatabase>;
 
@@ -115,7 +116,7 @@ export async function saveDishAndMaybeCompleteWish(
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
 
-  return database.transaction(async (transaction) => {
+  return withDatabaseBusyRetry(() => database.transaction(async (transaction) => {
     await transaction.insert(dishes).values({
       id,
       name,
@@ -193,5 +194,5 @@ export async function saveDishAndMaybeCompleteWish(
         imageUrl: savedDish.imageUrl,
       },
     };
-  });
+  }));
 }

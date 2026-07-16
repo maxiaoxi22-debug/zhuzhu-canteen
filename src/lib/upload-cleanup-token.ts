@@ -5,6 +5,7 @@ const DEFAULT_TTL_MS = 60 * 60 * 1000;
 
 interface UploadCleanupPayload {
   version: number;
+  reservationId: string;
   imageUrl: string;
   expiresAt: number;
   nonce: string;
@@ -18,6 +19,7 @@ function signature(payload: string, secret: string): Buffer {
 }
 
 export function createUploadCleanupToken(
+  reservationId: string,
   imageUrl: string,
   secret: string,
   now = Date.now(),
@@ -26,6 +28,7 @@ export function createUploadCleanupToken(
   if (!secret) throw new Error("Upload cleanup secret is not configured");
   const payload: UploadCleanupPayload = {
     version: TOKEN_VERSION,
+    reservationId,
     imageUrl,
     expiresAt: now + ttlMs,
     nonce: randomUUID(),
@@ -50,6 +53,7 @@ export function verifyUploadCleanupToken(
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<UploadCleanupPayload>;
     if (payload.version !== TOKEN_VERSION
       || typeof payload.imageUrl !== "string"
+      || typeof payload.reservationId !== "string"
       || typeof payload.expiresAt !== "number"
       || typeof payload.nonce !== "string"
       || payload.expiresAt < now) return null;

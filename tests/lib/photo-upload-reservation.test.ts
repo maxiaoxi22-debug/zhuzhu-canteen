@@ -79,4 +79,33 @@ describe("dish photo upload reservation races", () => {
     const row = await client.execute("SELECT status, claimed_dish_id FROM dish_photo_uploads WHERE id='upload-save-wins'");
     expect(row.rows[0]).toMatchObject({ status: "claimed", claimed_dish_id: expect.any(String) });
   });
+
+  it("allows exactly one winner when separate database connections save and clean concurrently", async () => {
+    const now = Date.now();
+    const imageUrl = "https://blob.test/concurrent.jpg";
+    await createPhotoUploadReservation(database, {
+      id: "upload-concurrent", imageUrl, now, expiresAt: now + 60_000,
+    });
+    const secondClient = createClient({ url: `file:${join(directory, "test.db")}` });
+    const secondDatabase = drizzle(secondClient) as ReturnType<typeof createDatabase>;
+    try {
+      const [saveResult, cleanupResult] = await Promise.allSettled([
+        saveDishAndMaybeCompleteWish(database, saveRequest("upload-concurrent", imageUrl)),
+        acquirePhotoUploadForCleanup(secondDatabase, {
+          id: "upload-concurrent", imageUrl, now: now + 1,
+        }),
+      ]);
+
+      if (saveResult.status === "fulfilled") {
+        expect(cleanupResult).toMatchObject({ status: "fulfilled", value: "claimed" });
+      } else {
+        expect(saveResult.reason).toMatchObject({ code: "photo-unavailable" });
+        expect(cleanupResult).toMatchObject({ status: "fulfilled", value: "acquired" });
+        const rows = await client.execute("SELECT id FROM dishes WHERE image_url=?", [imageUrl]);
+        expect(rows.rows).toHaveLength(0);
+      }
+    } finally {
+      secondClient.close();
+    }
+  });
 });

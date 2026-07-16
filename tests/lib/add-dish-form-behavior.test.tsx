@@ -207,7 +207,7 @@ describe("AddDishForm behavior", () => {
         candidates: [{ name: "  木樨肉！", category: "肉类" }],
         visibleIngredients: [], provider: "gemini", requestId: "recognize-1",
       }));
-      if (input.startsWith("/api/recipes/search")) return Promise.resolve(jsonResponse({ items: [{
+      if (input === "/api/recipes/search?q=%E6%9C%A8%E6%A8%A8%E8%82%89") return Promise.resolve(jsonResponse({ items: [{
         id: "recipe-1", name: "木樨肉", categoryKey: "肉类", description: null,
         servings: null, estimatedTimeMinutes: null, imageUrl: null, isWishlisted: false, isCooked: false,
       }] }));
@@ -280,7 +280,7 @@ describe("AddDishForm behavior", () => {
     fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
       if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
         uploadCount += 1;
-        return jsonResponse({ imageUrl: `https://image.test/${uploadCount}.jpg`, cleanupToken: `token-${uploadCount}` });
+        return jsonResponse({ imageUrl: `https://image.test/${uploadCount}.jpg`, photoUploadId: `upload-${uploadCount}`, cleanupToken: `token-${uploadCount}` });
       }
       if (input === "/api/uploads/dish-photo" && init?.method === "DELETE") {
         deletedTokens.push(JSON.parse(String(init.body)).cleanupToken);
@@ -319,9 +319,9 @@ describe("AddDishForm behavior", () => {
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await act(async () => selectFile(fileInput, new File(["a"], "a.jpg", { type: "image/jpeg" })));
     await act(async () => selectFile(fileInput, new File(["b"], "b.jpg", { type: "image/jpeg" })));
-    uploadB.resolve(jsonResponse({ imageUrl: "https://image.test/b.jpg", cleanupToken: "token-b" }));
+    uploadB.resolve(jsonResponse({ imageUrl: "https://image.test/b.jpg", photoUploadId: "upload-b", cleanupToken: "token-b" }));
     await flush();
-    uploadA.resolve(jsonResponse({ imageUrl: "https://image.test/a.jpg", cleanupToken: "token-a" }));
+    uploadA.resolve(jsonResponse({ imageUrl: "https://image.test/a.jpg", photoUploadId: "upload-a", cleanupToken: "token-a" }));
     await flush();
 
     expect(deletedTokens).toEqual(["token-a"]);
@@ -330,12 +330,37 @@ describe("AddDishForm behavior", () => {
     expect(deletedTokens).toEqual(["token-a", "token-b"]);
   });
 
+  it("invalidates an upload on close and cleans its late reservation response", async () => {
+    const upload = deferred<Response>();
+    const deletedTokens: string[] = [];
+    fetchMock.mockImplementation((input: string, init?: RequestInit) => {
+      if (input === "/api/uploads/dish-photo" && init?.method === "POST") return upload.promise;
+      if (input === "/api/uploads/dish-photo" && init?.method === "DELETE") {
+        deletedTokens.push(JSON.parse(String(init.body)).cleanupToken);
+        return Promise.resolve(jsonResponse({ success: true }));
+      }
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => selectFile(fileInput, new File(["late"], "late.jpg", { type: "image/jpeg" })));
+    await act(async () => (container.firstElementChild as HTMLElement).click());
+    upload.resolve(jsonResponse({
+      imageUrl: "https://image.test/late.jpg",
+      photoUploadId: "upload-late",
+      cleanupToken: "token-late",
+    }));
+    await flush();
+
+    expect(deletedTokens).toEqual(["token-late"]);
+    expect(onCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps a failed save photo locally and cleans it on close, but never deletes a successful save", async () => {
     let saveSucceeds = false;
     const deletedTokens: string[] = [];
     fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
       if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
-        return jsonResponse({ imageUrl: "https://image.test/owned.jpg", cleanupToken: "owned-token" });
+        return jsonResponse({ imageUrl: "https://image.test/owned.jpg", photoUploadId: "upload-owned", cleanupToken: "owned-token" });
       }
       if (input.startsWith("/api/dishes/check-name")) return jsonResponse({ match: null });
       if (input === "/api/wishlist?status=pending") return jsonResponse({ items: [] });
@@ -385,7 +410,7 @@ describe("AddDishForm behavior", () => {
     const deletedTokens: string[] = [];
     fetchMock.mockImplementation((input: string, init?: RequestInit) => {
       if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ imageUrl: "https://image.test/pending.jpg", cleanupToken: "pending-token" }));
+        return Promise.resolve(jsonResponse({ imageUrl: "https://image.test/pending.jpg", photoUploadId: "upload-pending", cleanupToken: "pending-token" }));
       }
       if (input.startsWith("/api/dishes/check-name")) return Promise.resolve(jsonResponse({ match: null }));
       if (input === "/api/wishlist?status=pending") return Promise.resolve(jsonResponse({ items: [] }));

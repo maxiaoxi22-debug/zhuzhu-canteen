@@ -10,6 +10,8 @@ import {
   type DishWishlistDatabase,
 } from "../../../lib/dish-wishlist-transaction";
 import { withRetry } from "../../../lib/network-resilience";
+import { isManagedDishBlobUrl } from "../../../lib/blob-delete";
+import { verifyUploadCleanupToken } from "../../../lib/upload-cleanup-token";
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -21,7 +23,11 @@ function optionalId(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-export function createDishHandlers(database: DishWishlistDatabase) {
+export function createDishHandlers(
+  database: DishWishlistDatabase,
+  options: { cleanupSecret?: string } = {},
+) {
+  const cleanupSecret = options.cleanupSecret ?? process.env.BLOB_READ_WRITE_TOKEN ?? "";
   let lastSuccessfulDishes: (typeof dishes.$inferSelect)[] = [];
 
   return {
@@ -61,16 +67,30 @@ export function createDishHandlers(database: DishWishlistDatabase) {
       const categoryId = typeof body.categoryId === "number" && Number.isInteger(body.categoryId)
         ? body.categoryId
         : null;
+      const imageUrl = typeof body.imageUrl === "string" && body.imageUrl ? body.imageUrl : null;
+      const photoUploadId = optionalId(body.photoUploadId);
+      const photoUploadToken = optionalId(body.photoUploadToken);
+      if (isManagedDishBlobUrl(imageUrl ?? "") || photoUploadId || photoUploadToken) {
+        const payload = photoUploadToken
+          ? verifyUploadCleanupToken(photoUploadToken, cleanupSecret)
+          : null;
+        if (!imageUrl || !photoUploadId || !payload
+          || payload.reservationId !== photoUploadId
+          || payload.imageUrl !== imageUrl) {
+          return NextResponse.json({ error: "照片上传凭证无效，请重新选择照片" }, { status: 400 });
+        }
+      }
       const saveRequest: DishSaveRequest = {
         name: body.name,
         categoryId,
-        imageUrl: typeof body.imageUrl === "string" && body.imageUrl ? body.imageUrl : null,
+        imageUrl,
         ingredients: stringArray(body.ingredients),
         steps: stringArray(body.steps),
         recipeId: optionalId(body.recipeId),
         wishlistItemId: optionalId(body.wishlistItemId),
         completeWishlist: body.completeWishlist === true,
         ownerId: null,
+        photoUploadId,
       };
 
       try {

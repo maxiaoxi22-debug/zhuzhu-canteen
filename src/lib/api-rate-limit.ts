@@ -2,6 +2,7 @@ import { eq, lte } from "drizzle-orm";
 
 import type { createDatabase } from "../db";
 import { apiRateLimits } from "../db/schema";
+import { withDatabaseBusyRetry } from "./database-retry";
 
 type RateLimitDatabase = ReturnType<typeof createDatabase>;
 
@@ -11,7 +12,7 @@ export async function consumeApiRateLimit(
   options: { limit: number; windowMs: number; now?: number },
 ): Promise<boolean> {
   const now = options.now ?? Date.now();
-  return database.transaction(async (transaction) => {
+  return withDatabaseBusyRetry(() => database.transaction(async (transaction) => {
     await transaction.delete(apiRateLimits).where(lte(apiRateLimits.expiresAt, now));
     const [current] = await transaction
       .select()
@@ -33,5 +34,5 @@ export async function consumeApiRateLimit(
       .set({ count: current.count + 1 })
       .where(eq(apiRateLimits.key, key));
     return true;
-  });
+  }));
 }

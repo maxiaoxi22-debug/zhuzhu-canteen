@@ -11,33 +11,59 @@ import { VisionRecognitionError } from "../../src/lib/vision";
 function multipartRequest(path: string, file?: File): Request {
   const formData = new FormData();
   if (file) formData.append("image", file);
-  return new Request(`http://local.test${path}`, { method: "POST", body: formData });
+  return new Request(`http://local.test${path}`, {
+    method: "POST",
+    headers: { origin: "http://local.test", "x-forwarded-for": "1.2.3.4" },
+    body: formData,
+  });
 }
+
+function reservationStore(overrides: Record<string, unknown> = {}) {
+  return {
+    create: vi.fn().mockResolvedValue(undefined),
+    acquire: vi.fn().mockResolvedValue("acquired"),
+    finish: vi.fn().mockResolvedValue(undefined),
+    restore: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+const allowed = { allow: vi.fn().mockResolvedValue(true) };
 
 describe("POST /api/uploads/dish-photo", () => {
   it("returns a stable URL and a signed cleanup token bound to that exact upload", async () => {
     const upload = vi.fn().mockResolvedValue("https://blob.test/dish.jpg");
-    const response = await createDishPhotoUploadHandler(upload, { cleanupSecret: "test-secret" })(multipartRequest(
+    const reservations = reservationStore();
+    const response = await createDishPhotoUploadHandler(upload, {
+      cleanupSecret: "test-secret", limiter: allowed, reservations, createId: () => "upload-1",
+    })(multipartRequest(
       "/api/uploads/dish-photo",
       new File([new Uint8Array([1, 2])], "dish.jpg", { type: "image/jpeg" }),
     ));
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toMatchObject({ imageUrl: "https://blob.test/dish.jpg", cleanupToken: expect.any(String) });
+    expect(body).toMatchObject({
+      imageUrl: "https://blob.test/dish.jpg", photoUploadId: "upload-1", cleanupToken: expect.any(String),
+    });
     expect(verifyUploadCleanupToken(body.cleanupToken, "test-secret")).toMatchObject({
+      reservationId: "upload-1",
       imageUrl: "https://blob.test/dish.jpg",
     });
+    expect(reservations.create).toHaveBeenCalledWith(expect.objectContaining({
+      id: "upload-1", imageUrl: "https://blob.test/dish.jpg",
+    }));
     expect(upload).toHaveBeenCalledTimes(1);
   });
 
   it("rejects non-images and images over 10 MB before upload", async () => {
     const upload = vi.fn();
-    const wrongType = await createDishPhotoUploadHandler(upload)(multipartRequest(
+    const options = { cleanupSecret: "test-secret", limiter: allowed, reservations: reservationStore() };
+    const wrongType = await createDishPhotoUploadHandler(upload, options)(multipartRequest(
       "/api/uploads/dish-photo",
       new File(["text"], "dish.txt", { type: "text/plain" }),
     ));
-    const tooLarge = await createDishPhotoUploadHandler(upload)(multipartRequest(
+    const tooLarge = await createDishPhotoUploadHandler(upload, options)(multipartRequest(
       "/api/uploads/dish-photo",
       new File([new Uint8Array(10 * 1024 * 1024 + 1)], "dish.jpg", { type: "image/jpeg" }),
     ));
@@ -51,7 +77,8 @@ describe("POST /api/uploads/dish-photo", () => {
     const upload = vi.fn();
     const POST = createDishPhotoUploadHandler(upload, {
       cleanupSecret: "test-secret",
-      limiter: { allow: vi.fn().mockReturnValue(false) },
+      limiter: { allow: vi.fn().mockResolvedValue(false) },
+      reservations: reservationStore(),
     });
     const response = await POST(multipartRequest(
       "/api/uploads/dish-photo",
@@ -79,8 +106,9 @@ describe("DELETE /api/uploads/dish-photo", () => {
       remove,
       {
         cleanupSecret: "test-secret",
-        limiter: { allow: vi.fn().mockReturnValue(true) },
-        isImageAssociated: vi.fn().mockResolvedValue(false),
+        limiter: { allow: vi.fn().mockResolvedValue(true) },
+        reservations: reservationStore(),
+        createId: () => "upload-exact",
       },
     );
     const uploadResponse = await handlers.POST(multipartRequest(
@@ -105,8 +133,9 @@ describe("DELETE /api/uploads/dish-photo", () => {
       remove,
       {
         cleanupSecret: "test-secret",
-        limiter: { allow: vi.fn().mockReturnValue(true) },
-        isImageAssociated: vi.fn().mockResolvedValue(true),
+        limiter: { allow: vi.fn().mockResolvedValue(true) },
+        reservations: reservationStore({ acquire: vi.fn().mockResolvedValue("claimed") }),
+        createId: () => "upload-saved",
       },
     );
     const uploaded = await handlers.POST(multipartRequest(
@@ -136,14 +165,63 @@ describe("DELETE /api/uploads/dish-photo", () => {
     const oversized = await handlers.DELETE(deleteRequest(token, "http://local.test", "x".repeat(4097)));
     const limitedHandlers = createDishPhotoUploadHandlers(vi.fn(), remove, {
       cleanupSecret: "test-secret",
-      limiter: { allow: vi.fn().mockReturnValue(false) },
-      isImageAssociated: vi.fn().mockResolvedValue(false),
+      limiter: { allow: vi.fn().mockResolvedValue(false) },
+      reservations: reservationStore(),
     });
     const limited = await limitedHandlers.DELETE(deleteRequest(token));
 
     expect(oversized.status).toBe(413);
     expect(limited.status).toBe(429);
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("restores a deleting reservation when Blob deletion fails", async () => {
+    const reservations = reservationStore();
+    const handlers = createDishPhotoUploadHandlers(
+      vi.fn().mockResolvedValue("https://blob.test/retry.jpg"),
+      vi.fn().mockRejectedValue(new Error("blob unavailable")),
+      {
+        cleanupSecret: "test-secret",
+        limiter: { allow: vi.fn().mockResolvedValue(true) },
+        reservations,
+        createId: () => "upload-retry",
+      },
+    );
+    const uploadResponse = await handlers.POST(multipartRequest(
+      "/api/uploads/dish-photo",
+      new File([new Uint8Array([1])], "dish.jpg", { type: "image/jpeg" }),
+    ));
+    const token = (await uploadResponse.json()).cleanupToken as string;
+
+    const response = await handlers.DELETE(deleteRequest(token));
+
+    expect(response.status).toBe(502);
+    expect(reservations.restore).toHaveBeenCalledWith("upload-retry", expect.any(Number));
+    expect(reservations.finish).not.toHaveBeenCalled();
+  });
+
+  it("keeps the reservation deleting when Blob deletion succeeds but finalization fails", async () => {
+    const reservations = reservationStore({ finish: vi.fn().mockRejectedValue(new Error("database unavailable")) });
+    const handlers = createDishPhotoUploadHandlers(
+      vi.fn().mockResolvedValue("https://blob.test/deleted.jpg"),
+      vi.fn().mockResolvedValue(undefined),
+      {
+        cleanupSecret: "test-secret",
+        limiter: { allow: vi.fn().mockResolvedValue(true) },
+        reservations,
+        createId: () => "upload-deleted",
+      },
+    );
+    const uploadResponse = await handlers.POST(multipartRequest(
+      "/api/uploads/dish-photo",
+      new File([new Uint8Array([1])], "dish.jpg", { type: "image/jpeg" }),
+    ));
+    const token = (await uploadResponse.json()).cleanupToken as string;
+
+    const response = await handlers.DELETE(deleteRequest(token));
+
+    expect(response.status).toBe(502);
+    expect(reservations.restore).not.toHaveBeenCalled();
   });
 });
 
@@ -155,7 +233,7 @@ describe("POST /api/recognize", () => {
       provider: "gemini",
       requestId: "request-123",
     });
-    const response = await createRecognizeHandler(recognize, () => "request-123")(multipartRequest(
+    const response = await createRecognizeHandler(recognize, () => "request-123", { limiter: allowed })(multipartRequest(
       "/api/recognize",
       new File([new Uint8Array([1, 2])], "dish.jpg", { type: "image/jpeg" }),
     ));
@@ -168,7 +246,7 @@ describe("POST /api/recognize", () => {
 
   it("returns a 422 manual fallback when every provider fails", async () => {
     const recognize = vi.fn().mockRejectedValue(new VisionRecognitionError("timeout", "request-123"));
-    const response = await createRecognizeHandler(recognize, () => "request-123")(multipartRequest(
+    const response = await createRecognizeHandler(recognize, () => "request-123", { limiter: allowed })(multipartRequest(
       "/api/recognize",
       new File([new Uint8Array([1])], "dish.jpg", { type: "image/jpeg" }),
     ));
@@ -178,6 +256,41 @@ describe("POST /api/recognize", () => {
       manualFallback: true,
       requestId: "request-123",
     });
+  });
+
+  it("rejects cross-origin and database-rate-limited recognition before calling a model", async () => {
+    const recognize = vi.fn();
+    const crossOriginRequest = multipartRequest(
+      "/api/recognize",
+      new File([new Uint8Array([1])], "dish.jpg", { type: "image/jpeg" }),
+    );
+    crossOriginRequest.headers.set("origin", "https://evil.test");
+    const crossOrigin = await createRecognizeHandler(recognize, () => "cross-origin", {
+      limiter: { allow: vi.fn().mockResolvedValue(true) },
+    })(crossOriginRequest);
+    const limited = await createRecognizeHandler(recognize, () => "limited", {
+      limiter: { allow: vi.fn().mockResolvedValue(false) },
+    })(multipartRequest(
+      "/api/recognize",
+      new File([new Uint8Array([1])], "dish.jpg", { type: "image/jpeg" }),
+    ));
+
+    expect(crossOrigin.status).toBe(403);
+    expect(limited.status).toBe(429);
+    expect(recognize).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized image through bounded multipart parsing", async () => {
+    const recognize = vi.fn();
+    const response = await createRecognizeHandler(recognize, () => "too-large", {
+      limiter: { allow: vi.fn().mockResolvedValue(true) },
+    })(multipartRequest(
+      "/api/recognize",
+      new File([new Uint8Array(10 * 1024 * 1024 + 1)], "dish.jpg", { type: "image/jpeg" }),
+    ));
+
+    expect(response.status).toBe(413);
+    expect(recognize).not.toHaveBeenCalled();
   });
 });
 

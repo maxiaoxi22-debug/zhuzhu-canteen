@@ -44,6 +44,7 @@ interface PendingCompletion {
 }
 
 interface UploadedPhoto {
+  id: string;
   imageUrl: string;
   cleanupToken: string;
 }
@@ -139,11 +140,14 @@ export default function AddDishForm({
     ingredients: editIngs.split("\n").map((item) => item.trim()).filter(Boolean),
     steps: editSteps.split("\n").map((item) => item.trim()).filter(Boolean),
     recipeId: matchedRecipe?.id ?? null,
+    photoUploadId: uploadedPhotoRef.current?.id ?? null,
+    photoUploadToken: uploadedPhotoRef.current?.cleanupToken ?? null,
   });
 
   useEffect(() => () => {
     saveGuardRef.current.begin();
     recipeGuardRef.current.begin();
+    uploadGuardRef.current.begin();
     const photo = uploadedPhotoRef.current;
     if (!submissionInFlightRef.current) {
       uploadedPhotoRef.current = null;
@@ -205,17 +209,17 @@ export default function AddDishForm({
       const formData = new FormData();
       formData.append("image", optimized);
       const response = await fetch("/api/uploads/dish-photo", { method: "POST", body: formData });
-      const result = await response.json() as { imageUrl?: string; cleanupToken?: string; error?: string };
+      const result = await response.json() as { imageUrl?: string; photoUploadId?: string; cleanupToken?: string; error?: string };
       if (!uploadGuardRef.current.isCurrent(revision)) {
-        if (result.imageUrl && result.cleanupToken) {
-          void cleanupUploadedPhoto({ imageUrl: result.imageUrl, cleanupToken: result.cleanupToken });
+        if (result.imageUrl && result.photoUploadId && result.cleanupToken) {
+          void cleanupUploadedPhoto({ id: result.photoUploadId, imageUrl: result.imageUrl, cleanupToken: result.cleanupToken });
         }
         return;
       }
       if (!response.ok || !result.imageUrl) throw new Error(result.error || "照片上传失败");
       setImageUrl(result.imageUrl);
-      if (result.cleanupToken) {
-        uploadedPhotoRef.current = { imageUrl: result.imageUrl, cleanupToken: result.cleanupToken };
+      if (result.photoUploadId && result.cleanupToken) {
+        uploadedPhotoRef.current = { id: result.photoUploadId, imageUrl: result.imageUrl, cleanupToken: result.cleanupToken };
       }
     } catch (error) {
       if (uploadGuardRef.current.isCurrent(revision)) {
@@ -264,12 +268,12 @@ export default function AddDishForm({
     setDuplicateCheckError("");
     setEditCat(next.category);
     try {
-      const response = await fetch(`/api/recipes/search?q=${encodeURIComponent(candidate.name.trim())}`);
+      const candidateKey = normalizeDishName(candidate.name);
+      const response = await fetch(`/api/recipes/search?q=${encodeURIComponent(candidateKey)}`);
       if (!response.ok) throw new Error("公共菜谱暂时不可用");
       const data = await response.json() as { items?: RecipeSearchResult[] };
       if (!recipeGuardRef.current.isCurrent(recipeRevision)
         || !uploadGuardRef.current.isCurrent(imageRevision)) return;
-      const candidateKey = normalizeDishName(candidate.name);
       const exact = (data.items ?? []).find((recipe) => normalizeDishName(recipe.name) === candidateKey) ?? null;
       setMatchedRecipe(exact);
       setRecipeMatchMessage(exact ? "" : "公共菜谱暂无同名菜谱，可继续手动保存");
@@ -328,6 +332,8 @@ export default function AddDishForm({
         ingredients: snapshot.ingredients,
         steps: snapshot.steps,
         recipeId: snapshot.recipeId ?? undefined,
+        photoUploadId: snapshot.photoUploadId ?? undefined,
+        photoUploadToken: snapshot.photoUploadToken ?? undefined,
         ...completionFields,
       });
       uploadedPhotoRef.current = null;
@@ -390,6 +396,7 @@ export default function AddDishForm({
 
   const closeForm = () => {
     if (saving) return;
+    uploadGuardRef.current.begin();
     const photo = uploadedPhotoRef.current;
     uploadedPhotoRef.current = null;
     if (photo) void cleanupUploadedPhoto(photo);

@@ -86,6 +86,15 @@ describe("recipe read handlers", () => {
     });
   });
 
+  it("returns the canonical recipe when the AI client sends its punctuation-free normalized name", async () => {
+    const response = await searchHandler(new Request("http://local.test/api/recipes/search?q=%E6%9C%A8%E6%A8%A8%E8%82%89"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: "recipe-1", name: "木樨肉" })],
+    });
+  });
+
   it("uses normalized name and category when recipe ids are absent", async () => {
     const response = await searchHandler(new Request("http://local.test/api/recipes/search?q=%E8%8F%9C%E5%BF%83"));
 

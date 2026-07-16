@@ -100,6 +100,8 @@ describe("菜品表单数据处理", () => {
       ingredients: ["鸡蛋"],
       steps: ["炒熟"],
       recipeId: "recipe-1",
+      photoUploadId: "upload-1",
+      photoUploadToken: "token-1",
     });
 
     expect(snapshot.recipeId).toBe("recipe-1");

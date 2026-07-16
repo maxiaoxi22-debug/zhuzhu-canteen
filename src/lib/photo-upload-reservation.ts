@@ -2,6 +2,7 @@ import { and, eq, gte } from "drizzle-orm";
 
 import type { createDatabase } from "../db";
 import { dishPhotoUploads } from "../db/schema";
+import { withDatabaseBusyRetry } from "./database-retry";
 
 export type PhotoUploadDatabase = ReturnType<typeof createDatabase>;
 type PhotoUploadTransaction = Parameters<Parameters<PhotoUploadDatabase["transaction"]>[0]>[0];
@@ -48,7 +49,7 @@ export async function acquirePhotoUploadForCleanup(
   database: PhotoUploadDatabase,
   input: ReservationIdentity & { now: number },
 ): Promise<"acquired" | "temp" | "claimed" | "deleting" | "missing"> {
-  return database.transaction(async (transaction) => {
+  return withDatabaseBusyRetry(() => database.transaction(async (transaction) => {
     const acquired = await transaction
       .update(dishPhotoUploads)
       .set({ status: "deleting", updatedAt: new Date(input.now).toISOString() })
@@ -66,7 +67,7 @@ export async function acquirePhotoUploadForCleanup(
       .where(and(eq(dishPhotoUploads.id, input.id), eq(dishPhotoUploads.imageUrl, input.imageUrl)))
       .limit(1);
     return reservation?.status ?? "missing";
-  });
+  }));
 }
 
 export async function finishPhotoUploadCleanup(database: PhotoUploadDatabase, id: string): Promise<void> {
