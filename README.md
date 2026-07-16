@@ -1,20 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 猪猪食堂
 
-## Getting Started
+一个面向家庭菜单的移动端 Web 应用：记录实际做过的菜，搜索公共菜谱，管理想做的心愿菜，并安排今日菜单。
+
+公网地址：<https://zhuzhu-canteen.vercel.app>
+
+## 数据边界
+
+- **公共菜谱库**：HowToCook 菜谱文字，用于搜索、用量和做法查看。
+- **猪猪心愿单**：想做但尚未做过的菜。
+- **猪猪饭盆**：用户实际做过的菜、成品照和历史记录。
+
+心愿菜加入今日菜单只代表计划，不会自动进入饭盆或完成心愿。只有上传真实成品照并保存后，才会询问是否完成匹配心愿。
+
+## 本地启动
 
 First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+电脑打开 [http://localhost:3000](http://localhost:3000)。如需同一 Wi-Fi 下的手机访问，执行：
+
+```bash
+npm run dev -- --hostname 0.0.0.0
+```
+
+然后使用终端显示的局域网 IP，不要依赖文档中的固定 IP。
 
 ## 家庭局域网 Qwen 识图 POC
 
