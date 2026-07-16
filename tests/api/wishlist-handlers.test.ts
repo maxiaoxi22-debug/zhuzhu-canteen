@@ -18,17 +18,25 @@ import {
 } from "../../src/lib/wishlist-repository";
 
 describe("wishlist handlers", () => {
-  let client: Client;
-  let tempDirectory: string;
+  let client: Client | undefined;
+  let tempDirectory: string | undefined;
   let database: WishlistDatabase;
   let handlers: ReturnType<typeof createWishlistHandlers>;
   let deleteHandler: ReturnType<typeof createWishlistDeleteHandler>;
   let completedHandler: ReturnType<typeof createCompletedWishlistHandler>;
 
+  function getClient(): Client {
+    if (!client) throw new Error("test database client is unavailable");
+    return client;
+  }
+
   beforeEach(async () => {
+    client = undefined;
+    tempDirectory = undefined;
     tempDirectory = await mkdtemp(join(tmpdir(), "wishlist-handlers-"));
-    client = createClient({ url: `file:${join(tempDirectory, "test.db")}` });
-    await client.executeMultiple(`
+    const testClient = createClient({ url: `file:${join(tempDirectory, "test.db")}` });
+    client = testClient;
+    await testClient.executeMultiple(`
       CREATE TABLE categories (
         id integer PRIMARY KEY AUTOINCREMENT, name text NOT NULL,
         sort_order integer NOT NULL DEFAULT 0, created_at text NOT NULL
@@ -43,8 +51,8 @@ describe("wishlist handlers", () => {
         dish_id text REFERENCES dishes(id), notes text, created_at text NOT NULL
       );
     `);
-    await applyRecipesWishlistMigration(client);
-    await client.executeMultiple(`
+    await applyRecipesWishlistMigration(testClient);
+    await testClient.executeMultiple(`
       INSERT INTO recipes VALUES (
         'recipe-1','木樨肉','木樨肉','肉类','家常快手菜',2,20,
         'HowToCook','https://example.test/recipe-1','MIT','dishes/meat_dish/木樨肉.md','revision-1',
@@ -70,15 +78,18 @@ describe("wishlist handlers", () => {
       );
     `);
 
-    database = drizzle(client);
+    database = drizzle(testClient);
     handlers = createWishlistHandlers(database);
     deleteHandler = createWishlistDeleteHandler(database);
     completedHandler = createCompletedWishlistHandler(database);
   });
 
   afterEach(async () => {
-    client.close();
-    await rm(tempDirectory, { recursive: true, force: true });
+    try {
+      client?.close();
+    } finally {
+      if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true });
+    }
   });
 
   it("adds a recipe to the pending wishlist", async () => {
@@ -129,7 +140,7 @@ describe("wishlist handlers", () => {
     expect(duplicates).toHaveLength(4);
     const createdId = created[0].item.id;
     expect(duplicates.every((result) => result.itemId === createdId)).toBe(true);
-    const rows = await client.execute(
+    const rows = await getClient().execute(
       "SELECT id FROM wishlist_items WHERE owner_id = 'owner-race' AND status = 'pending'",
     );
     expect(rows.rows).toHaveLength(1);
@@ -164,13 +175,13 @@ describe("wishlist handlers", () => {
     });
   });
 
-  it("reads the pending list and both counts in one database snapshot", async () => {
-    const transaction = vi.spyOn(database, "transaction");
+  it("reads the pending list and both counts in one deferred batch snapshot", async () => {
+    const batch = vi.spyOn(database, "batch");
 
     const response = await handlers.GET(new Request("http://local.test/api/wishlist?status=pending"));
 
     expect(response.status).toBe(200);
-    expect(transaction).toHaveBeenCalledOnce();
+    expect(batch).toHaveBeenCalledOnce();
   });
 
   it("deletes a pending item", async () => {
@@ -187,7 +198,7 @@ describe("wishlist handlers", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true });
-    const remaining = await client.execute({
+    const remaining = await getClient().execute({
       sql: "SELECT count(*) AS count FROM wishlist_items WHERE id = ?",
       args: [item.id],
     });
@@ -200,7 +211,7 @@ describe("wishlist handlers", () => {
     }), { params: Promise.resolve({ id: "wish-completed-old" }) });
 
     expect(response.status).toBe(404);
-    const row = await client.execute("SELECT status FROM wishlist_items WHERE id = 'wish-completed-old'");
+    const row = await getClient().execute("SELECT status FROM wishlist_items WHERE id = 'wish-completed-old'");
     expect(row.rows[0].status).toBe("completed");
   });
 
@@ -226,7 +237,7 @@ describe("wishlist handlers", () => {
     expect(anonymousDuplicate).toMatchObject({ kind: "duplicate", itemId: anonymous.item.id });
     expect(ownerADuplicate).toMatchObject({ kind: "duplicate", itemId: ownerA.item.id });
 
-    await client.executeMultiple(`
+    await getClient().executeMultiple(`
       INSERT INTO wishlist_items VALUES (
         'wish-owner-a-completed','owner-a',NULL,'A 完成菜','A 完成菜','肉类','completed',
         '2026-07-12T00:00:00.000Z','2026-07-16T00:00:00.000Z',NULL,
