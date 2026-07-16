@@ -136,13 +136,9 @@ export interface Category {
   createdAt: string;
 }
 
-export interface RecognitionResult {
-  name: string;
-  category: string;
-  ingredients: string[];
-  steps: string[];
-  imageUrl: string;
-}
+export type CategoryKey = "肉类" | "青菜" | "主食" | "海鲜" | "汤类" | "其他";
+
+export type RecognitionResult = import("./vision/types").VisionRecognitionResult;
 
 export interface RecipeSearchResult {
   id: string;

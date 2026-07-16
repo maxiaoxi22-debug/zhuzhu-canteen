@@ -1,39 +1,76 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { NextRequest, NextResponse } from "next/server";
-import { recognizeDish } from "@/lib/gemini";
-import { uploadImage } from "@/lib/blob";
+import { randomUUID } from "node:crypto";
+import { NextResponse } from "next/server";
+import {
+  createConfiguredVisionProviders,
+  recognizeWithProviders,
+  VisionRecognitionError,
+  type VisionRecognitionResult,
+} from "../../../lib/vision";
 
-export async function POST(request: NextRequest) {
-  try {
-    const formData = await request.formData();
-    const file = formData.get("image") as File;
-    if (!file) return NextResponse.json({ error: "No image provided" }, { status: 400 });
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
-    const bytes = await file.arrayBuffer();
-    const base64 = Buffer.from(bytes).toString("base64");
+type Recognize = (input: {
+  bytes: Uint8Array;
+  mimeType: string;
+  requestId: string;
+}) => Promise<VisionRecognitionResult>;
 
-    const imageUrl = await uploadImage(file);
+const recognize: Recognize = (input) => recognizeWithProviders(
+  input,
+  { ...createConfiguredVisionProviders(), timeoutMs: 20_000 },
+);
 
-    let recognition;
+export function createRecognizeHandler(
+  recognizeImage: Recognize = recognize,
+  createRequestId: () => string = randomUUID,
+) {
+  return async function recognizeHandler(request: Request) {
+    const requestId = createRequestId();
+    const startedAt = Date.now();
+    let formData: FormData;
     try {
-      recognition = await recognizeDish(base64, file.type);
-    } catch (e: any) {
-      console.warn("Recognition failed, returning upload only:", e?.message);
-      recognition = null;
+      formData = await request.formData();
+    } catch {
+      return NextResponse.json({ error: "请上传菜品照片", requestId }, { status: 400 });
     }
 
-    if (recognition) {
-	      return NextResponse.json({ ...recognition, imageUrl });
-	    }
-	    return NextResponse.json({ imageUrl, aiFailed: true }, { status: 422 });
-  } catch (error: any) {
-    const msg = error?.message || String(error);
-    console.error("Recognition error:", msg);
-    return NextResponse.json({
-      error: msg.includes("API key") ? "Gemini API Key 无效，请检查环境变量 GEMINI_API_KEY。手动输入菜品信息即可保存。"
-        : msg.includes("fetch") ? "网络连接失败，请检查是否可访问 Google API。可手动输入菜品信息。"
-        : `识别失败：${msg}。可手动输入菜品信息。`,
-      manualFallback: true,
-    }, { status: 500 });
-  }
+    const image = formData.get("image");
+    if (!(image instanceof File)) {
+      return NextResponse.json({ error: "请上传菜品照片", requestId }, { status: 400 });
+    }
+    if (!image.type.startsWith("image/")) {
+      return NextResponse.json({ error: "仅支持图片文件", requestId }, { status: 415 });
+    }
+    if (image.size > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "图片不能超过 10 MB", requestId }, { status: 413 });
+    }
+
+    try {
+      const result = await recognizeImage({
+        bytes: new Uint8Array(await image.arrayBuffer()),
+        mimeType: image.type,
+        requestId,
+      });
+      console.info("Dish recognition completed", {
+        requestId,
+        provider: result.provider,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return NextResponse.json(result);
+    } catch (error) {
+      const errorType = error instanceof VisionRecognitionError ? error.code : "unavailable";
+      console.warn("Dish recognition failed", {
+        requestId,
+        errorType,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return NextResponse.json({
+        error: "AI 暂时无法识别，请手动输入菜品信息",
+        manualFallback: true,
+        requestId,
+      }, { status: 422 });
+    }
+  };
 }
+
+export const POST = createRecognizeHandler();
