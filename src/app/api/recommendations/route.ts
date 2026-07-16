@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { desc } from "drizzle-orm";
 
 import { db } from "../../../db";
 import { dishes } from "../../../db/schema";
@@ -9,7 +10,7 @@ export function createRecommendationHandler(database: WishlistDatabase) {
   return async function GET(request: Request): Promise<Response> {
     const category = new URL(request.url).searchParams.get("category")?.trim() || "all";
     const [dishRows, wishlist] = await Promise.all([
-      database.select().from(dishes),
+      database.select().from(dishes).orderBy(desc(dishes.createdAt)),
       listWishlistItems(database, null),
     ]);
     return NextResponse.json({

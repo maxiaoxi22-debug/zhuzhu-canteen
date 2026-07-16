@@ -14,6 +14,7 @@ interface TodayPageProps {
   onDishClick: (dish: Dish) => void;
   onRecipeClick: (recipeId: string) => void;
   refresh: () => void;
+  recommendationRevision: number;
   wishlistCount: number;
   onOpenWishlist: () => void;
 }
@@ -33,6 +34,7 @@ export default function TodayPage({
   onDishClick,
   onRecipeClick,
   refresh,
+  recommendationRevision,
   wishlistCount,
   onOpenWishlist,
 }: TodayPageProps) {
@@ -62,7 +64,7 @@ export default function TodayPage({
     }
   }, [randCat]);
 
-  useEffect(() => { void fetchRecommendations(); }, [fetchRecommendations, dishes.length, wishlistCount]);
+  useEffect(() => { void fetchRecommendations(); }, [fetchRecommendations, recommendationRevision, wishlistCount]);
 
   const randomize = useCallback(() => {
     if (!pool.length) { setRecommendation(null); return; }

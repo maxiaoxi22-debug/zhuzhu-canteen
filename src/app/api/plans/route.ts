@@ -95,10 +95,17 @@ export function createPlanHandlers(database: WishlistDatabase) {
             createdAt: new Date().toISOString(),
           });
         } else {
+          const normalizedDishId = (dishId as string).trim();
+          const [dish] = await database
+            .select({ id: dishes.id })
+            .from(dishes)
+            .where(and(eq(dishes.id, normalizedDishId), isNull(dishes.ownerId)))
+            .limit(1);
+          if (!dish) return NextResponse.json({ error: "饭盆菜品不存在" }, { status: 404 });
           await database.insert(mealPlans).values({
             date,
             mealType,
-            dishId: (dishId as string).trim(),
+            dishId: normalizedDishId,
             recipeId: null,
             wishlistItemId: null,
             sourceType: "dish",

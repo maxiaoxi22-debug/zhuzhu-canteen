@@ -162,7 +162,7 @@ export default function Home() {
         <LibraryPage dishes={dishes} onDishClick={setSelectedDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
       {tab === "today" && (
-        <TodayPage dishes={dishes} onDishClick={setSelectedDish} onRecipeClick={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "today" })} refresh={refresh} wishlistCount={wishlistCount} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
+        <TodayPage dishes={dishes} onDishClick={setSelectedDish} onRecipeClick={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "today" })} refresh={refresh} recommendationRevision={refreshKey} wishlistCount={wishlistCount} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
       )}
       {tab === "history" && (
         <HistoryPage events={historyData.events} frequency={historyData.frequency} loading={historyLoading} onDishClick={setSelectedDish} />

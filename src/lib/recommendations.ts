@@ -18,6 +18,9 @@ export function buildRecommendationPool(
   for (const dish of dishes) {
     const categoryKey = getCategoryMeta(dish.categoryId).name;
     if (category !== "all" && categoryKey !== category) continue;
+    if (dish.recipeId && recipeIds.has(dish.recipeId)) continue;
+    const fallbackKey = nameCategoryKey(dish.name, categoryKey);
+    if (namesAndCategories.has(fallbackKey)) continue;
     items.push({
       source: "dish",
       dishId: dish.id,
@@ -30,7 +33,7 @@ export function buildRecommendationPool(
       sourceLabel: `饭盆 · 做过 ${dish.timesCooked} 次`,
     });
     if (dish.recipeId) recipeIds.add(dish.recipeId);
-    namesAndCategories.add(nameCategoryKey(dish.name, categoryKey));
+    namesAndCategories.add(fallbackKey);
   }
 
   for (const wish of wishes) {

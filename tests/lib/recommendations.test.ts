@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import { buildRecommendationPool } from "../../src/lib/recommendations";
 import type { Dish, WishlistRecommendationInput } from "../../src/lib/types";
@@ -35,11 +36,34 @@ function wish(overrides: Partial<WishlistRecommendationInput> = {}): WishlistRec
 }
 
 describe("buildRecommendationPool", () => {
+  it("loads dishes newest first before retaining the first duplicate", () => {
+    const route = readFileSync(new URL("../../src/app/api/recommendations/route.ts", import.meta.url), "utf8");
+    expect(route).toContain("orderBy(desc(dishes.createdAt))");
+  });
+
   it("keeps the dish when a pending wish points to the same recipe", () => {
     const pool = buildRecommendationPool([dish()], [wish()], "all");
 
     expect(pool).toHaveLength(1);
     expect(pool[0]).toMatchObject({ source: "dish", dishId: "dish-1", recipeId: "recipe-1" });
+  });
+
+  it("keeps the first dish when two dishes point to the same recipe", () => {
+    const pool = buildRecommendationPool([
+      dish({ id: "newest", name: "新名称", createdAt: "2026-07-17T02:00:00.000Z" }),
+      dish({ id: "older", name: "旧名称", createdAt: "2026-07-16T02:00:00.000Z" }),
+    ], [], "all");
+
+    expect(pool).toMatchObject([{ source: "dish", dishId: "newest" }]);
+  });
+
+  it("keeps the first dish when normalized name and category match", () => {
+    const pool = buildRecommendationPool([
+      dish({ id: "newest", recipeId: null, name: "  番茄炒蛋 ", categoryId: 1 }),
+      dish({ id: "older", recipeId: null, name: "番茄炒蛋", categoryId: 1 }),
+    ], [], "all");
+
+    expect(pool).toMatchObject([{ source: "dish", dishId: "newest" }]);
   });
 
   it("falls back to normalized name and category deduplication", () => {

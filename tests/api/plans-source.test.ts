@@ -61,6 +61,13 @@ describe("plans source validation", () => {
         'dish-1','现有菜','现有菜',1,NULL,'[]','[]',NULL,NULL,NULL,3,
         '2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
       );
+      INSERT INTO dishes (
+        id,name,name_key,category_id,image_url,ingredients,steps,recipe_id,wishlist_item_id,owner_id,
+        times_cooked,created_at,updated_at
+      ) VALUES (
+        'dish-owned','别人的菜','别人的菜',1,NULL,'[]','[]',NULL,NULL,'owner-a',0,
+        '2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
+      );
     `);
     handlers = createPlanHandlers(drizzle(client));
   });
@@ -98,11 +105,20 @@ describe("plans source validation", () => {
     });
   });
 
+  it.each(["dish-missing", "dish-owned"])("rejects unavailable dish %s before inserting", async (dishId) => {
+    const response = await handlers.POST(request({ dishId }));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "饭盆菜品不存在" });
+    const plans = await client!.execute("SELECT id FROM meal_plans");
+    expect(plans.rows).toHaveLength(0);
+  });
+
   it("does not complete the wish, create a dish, completion event, or increment counts", async () => {
     await handlers.POST(request({ wishlistItemId: "wish-pending" }));
 
     const wish = await client!.execute("SELECT status, completed_at FROM wishlist_items WHERE id = 'wish-pending'");
-    const dishes = await client!.execute("SELECT id, times_cooked FROM dishes");
+    const dishes = await client!.execute("SELECT id, times_cooked FROM dishes WHERE id = 'dish-1'");
     const completions = await client!.execute("SELECT id FROM wishlist_completions");
     expect(wish.rows[0]).toMatchObject({ status: "pending", completed_at: null });
     expect(dishes.rows).toEqual([expect.objectContaining({ id: "dish-1", times_cooked: 3 })]);
