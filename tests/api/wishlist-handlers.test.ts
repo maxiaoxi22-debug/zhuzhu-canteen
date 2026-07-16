@@ -1,20 +1,33 @@
 import { createClient, type Client } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCompletedWishlistHandler } from "../../src/app/api/wishlist/completed/route";
 import { createWishlistDeleteHandler } from "../../src/app/api/wishlist/[id]/route";
 import { createWishlistHandlers } from "../../src/app/api/wishlist/route";
 import { applyRecipesWishlistMigration } from "../../src/db/migrate";
+import {
+  addWishlistItem,
+  listWishlistCompletions,
+  listWishlistItems,
+  removePendingWishlistItem,
+  type WishlistDatabase,
+} from "../../src/lib/wishlist-repository";
 
 describe("wishlist handlers", () => {
   let client: Client;
+  let tempDirectory: string;
+  let database: WishlistDatabase;
   let handlers: ReturnType<typeof createWishlistHandlers>;
   let deleteHandler: ReturnType<typeof createWishlistDeleteHandler>;
   let completedHandler: ReturnType<typeof createCompletedWishlistHandler>;
 
   beforeEach(async () => {
-    client = createClient({ url: ":memory:" });
+    tempDirectory = await mkdtemp(join(tmpdir(), "wishlist-handlers-"));
+    client = createClient({ url: `file:${join(tempDirectory, "test.db")}` });
     await client.executeMultiple(`
       CREATE TABLE categories (
         id integer PRIMARY KEY AUTOINCREMENT, name text NOT NULL,
@@ -57,13 +70,16 @@ describe("wishlist handlers", () => {
       );
     `);
 
-    const database = drizzle(client);
+    database = drizzle(client);
     handlers = createWishlistHandlers(database);
     deleteHandler = createWishlistDeleteHandler(database);
     completedHandler = createCompletedWishlistHandler(database);
   });
 
-  afterEach(() => client.close());
+  afterEach(async () => {
+    client.close();
+    await rm(tempDirectory, { recursive: true, force: true });
+  });
 
   it("adds a recipe to the pending wishlist", async () => {
     const response = await handlers.POST(new Request("http://local.test/api/wishlist", {
@@ -102,6 +118,24 @@ describe("wishlist handlers", () => {
     });
   });
 
+  it("recovers concurrent duplicate inserts with one shared pending item id", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => addWishlistItem(database, "recipe-1", "owner-race")),
+    );
+    const created = results.filter((result) => result.kind === "created");
+    const duplicates = results.filter((result) => result.kind === "duplicate");
+
+    expect(created).toHaveLength(1);
+    expect(duplicates).toHaveLength(4);
+    const createdId = created[0].item.id;
+    expect(duplicates.every((result) => result.itemId === createdId)).toBe(true);
+    const rows = await client.execute(
+      "SELECT id FROM wishlist_items WHERE owner_id = 'owner-race' AND status = 'pending'",
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0].id).toBe(createdId);
+  });
+
   it("returns 404 for an unknown recipe", async () => {
     const response = await handlers.POST(new Request("http://local.test/api/wishlist", {
       method: "POST",
@@ -128,6 +162,15 @@ describe("wishlist handlers", () => {
       pendingCount: 1,
       completedCount: 2,
     });
+  });
+
+  it("reads the pending list and both counts in one database snapshot", async () => {
+    const transaction = vi.spyOn(database, "transaction");
+
+    const response = await handlers.GET(new Request("http://local.test/api/wishlist?status=pending"));
+
+    expect(response.status).toBe(200);
+    expect(transaction).toHaveBeenCalledOnce();
   });
 
   it("deletes a pending item", async () => {
@@ -168,5 +211,45 @@ describe("wishlist handlers", () => {
     const body = await response.json() as { items: Array<{ id: string; name: string; imageUrl: string }> };
     expect(body.items.map(({ id }) => id)).toEqual(["completion-new", "completion-old"]);
     expect(body.items[0]).toMatchObject({ name: "番茄炒蛋", imageUrl: "new.jpg" });
+  });
+
+  it("keeps repository reads, duplicates, and deletes isolated by owner", async () => {
+    const anonymous = await addWishlistItem(database, "recipe-1", null);
+    const ownerA = await addWishlistItem(database, "recipe-1", "owner-a");
+    const ownerB = await addWishlistItem(database, "recipe-1", "owner-b");
+    const anonymousDuplicate = await addWishlistItem(database, "recipe-1", null);
+    const ownerADuplicate = await addWishlistItem(database, "recipe-1", "owner-a");
+    if (anonymous.kind !== "created" || ownerA.kind !== "created" || ownerB.kind !== "created") {
+      throw new Error("owner isolation setup failed");
+    }
+    expect(new Set([anonymous.item.id, ownerA.item.id, ownerB.item.id]).size).toBe(3);
+    expect(anonymousDuplicate).toMatchObject({ kind: "duplicate", itemId: anonymous.item.id });
+    expect(ownerADuplicate).toMatchObject({ kind: "duplicate", itemId: ownerA.item.id });
+
+    await client.executeMultiple(`
+      INSERT INTO wishlist_items VALUES (
+        'wish-owner-a-completed','owner-a',NULL,'A 完成菜','A 完成菜','肉类','completed',
+        '2026-07-12T00:00:00.000Z','2026-07-16T00:00:00.000Z',NULL,
+        '2026-07-12T00:00:00.000Z','2026-07-16T00:00:00.000Z'
+      );
+      INSERT INTO wishlist_completions VALUES (
+        'completion-owner-a','owner-a','wish-owner-a-completed',NULL,NULL,
+        '2026-07-12T00:00:00.000Z','2026-07-16T00:00:00.000Z','A 完成菜',NULL,'2026-07-16T00:00:00.000Z'
+      );
+    `);
+
+    const anonymousList = await listWishlistItems(database, null);
+    const ownerAList = await listWishlistItems(database, "owner-a");
+    const ownerBList = await listWishlistItems(database, "owner-b");
+    expect(anonymousList).toMatchObject({ pendingCount: 1, completedCount: 2 });
+    expect(ownerAList).toMatchObject({ pendingCount: 1, completedCount: 1 });
+    expect(ownerBList).toMatchObject({ pendingCount: 1, completedCount: 0 });
+    expect(await listWishlistCompletions(database, null)).toHaveLength(2);
+    expect(await listWishlistCompletions(database, "owner-a")).toHaveLength(1);
+    expect(await listWishlistCompletions(database, "owner-b")).toHaveLength(0);
+
+    expect(await removePendingWishlistItem(database, ownerA.item.id, null)).toBe(false);
+    expect(await removePendingWishlistItem(database, ownerA.item.id, "owner-b")).toBe(false);
+    expect(await removePendingWishlistItem(database, ownerA.item.id, "owner-a")).toBe(true);
   });
 });

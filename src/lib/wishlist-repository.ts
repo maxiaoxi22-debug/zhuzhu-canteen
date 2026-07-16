@@ -112,37 +112,37 @@ export async function listWishlistItems(
   database: WishlistDatabase,
   ownerId: string | null,
 ): Promise<{ items: WishlistItemView[]; pendingCount: number; completedCount: number }> {
-  const [rows, pendingResult, completedResult] = await Promise.all([
-    database
+  return database.transaction(async (transaction) => {
+    const rows = await transaction
       .select({ item: wishlistItems, recipeName: recipes.name, imageUrl: recipes.imageUrl })
       .from(wishlistItems)
       .leftJoin(recipes, eq(recipes.id, wishlistItems.recipeId))
       .where(and(eq(wishlistItems.status, "pending"), itemOwnerCondition(ownerId)))
-      .orderBy(desc(wishlistItems.addedAt)),
-    database
+      .orderBy(desc(wishlistItems.addedAt));
+    const pendingResult = await transaction
       .select({ value: count() })
       .from(wishlistItems)
-      .where(and(eq(wishlistItems.status, "pending"), itemOwnerCondition(ownerId))),
-    database
+      .where(and(eq(wishlistItems.status, "pending"), itemOwnerCondition(ownerId)));
+    const completedResult = await transaction
       .select({ value: count() })
       .from(wishlistCompletions)
-      .where(completionOwnerCondition(ownerId)),
-  ]);
+      .where(completionOwnerCondition(ownerId));
 
-  return {
-    items: rows.map(({ item, recipeName, imageUrl }) => ({
-      id: item.id,
-      recipeId: item.recipeId,
-      name: item.customName ?? recipeName ?? item.nameKey,
-      categoryKey: item.categoryKey,
-      imageUrl,
-      status: item.status,
-      addedAt: item.addedAt,
-      completedAt: item.completedAt,
-    })),
-    pendingCount: pendingResult[0]?.value ?? 0,
-    completedCount: completedResult[0]?.value ?? 0,
-  };
+    return {
+      items: rows.map(({ item, recipeName, imageUrl }) => ({
+        id: item.id,
+        recipeId: item.recipeId,
+        name: item.customName ?? recipeName ?? item.nameKey,
+        categoryKey: item.categoryKey,
+        imageUrl,
+        status: item.status,
+        addedAt: item.addedAt,
+        completedAt: item.completedAt,
+      })),
+      pendingCount: pendingResult[0]?.value ?? 0,
+      completedCount: completedResult[0]?.value ?? 0,
+    };
+  });
 }
 
 export async function removePendingWishlistItem(
