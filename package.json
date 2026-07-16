@@ -1,6 +1,6 @@
 {
   "name": "zhuzhu-canteen",
-  "version": "0.1.0",
+  "version": "0.3.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run tests/lib tests/config",
     "test:watch": "vitest tests/lib tests/config",
-    "test:api": "node -e \"console.error('API tests are blocked until an isolated test database and test server are configured.'); process.exit(1)\"",
+    "test:api": "vitest run tests/api/recipe-handlers.test.ts tests/api/vision-routes.test.ts tests/api/wishlist-handlers.test.ts",
     "test:db": "vitest run tests/db",
     "db:migrate:recipes": "tsx scripts/db/migrate-recipes-wishlist.ts",
     "db:backup": "tsx scripts/db/export-backup.ts",

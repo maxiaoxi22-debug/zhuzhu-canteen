@@ -4,6 +4,17 @@
 
 公网地址：<https://zhuzhu-canteen.vercel.app>
 
+## 环境变量
+
+复制 `.env.example` 为 `.env.local`，并配置：
+
+- `TURSO_DATABASE_URL`：Turso 数据库地址。
+- `TURSO_AUTH_TOKEN`：Turso 访问令牌。
+- `BLOB_READ_WRITE_TOKEN`：Vercel Blob 上传与删除令牌。
+- `GEMINI_API_KEY`：公网 AI 菜名识别密钥；缺失或失效时仍可手动填写菜名保存。
+
+部署到 Vercel 时，在项目的 Environment Variables 中配置同名变量，不要把真实值提交到 Git。生产环境不设置 `VISION_PROVIDER=ollama`。
+
 ## 数据边界
 
 - **公共菜谱库**：HowToCook 菜谱文字，用于搜索、用量和做法查看。
@@ -83,7 +94,7 @@ npx tsx scripts/vision/evaluate-local.ts \
 
 `npm test` only runs unit and configuration tests. It does not call the local API and cannot write to the Turso production database or Vercel Blob.
 
-The existing files under `tests/api/` are retained for a future isolated test database. Do not run them against the normal development server. `npm run test:api` is intentionally blocked until a separate test server and database are configured.
+`npm run test:api` runs only the isolated route-handler suites. They inject test dependencies and do not contact the normal development server or production database. The older `tests/api/` files that call `localhost:3000` remain manual integration tests and are intentionally excluded from this command.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
