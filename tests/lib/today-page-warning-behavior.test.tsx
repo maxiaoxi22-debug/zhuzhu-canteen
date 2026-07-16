@@ -72,4 +72,53 @@ describe("TodayPage recommendation warnings", () => {
     expect(container.textContent).toContain("糖醋排骨");
     expect(container.textContent).toContain("饭盆菜品暂时读取失败，已展示心愿单推荐");
   });
+
+  it("clears an earlier fatal recommendation error after a successful retry", async () => {
+    let recommendationCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("/api/recommendations")) {
+        recommendationCalls += 1;
+        if (recommendationCalls === 1) {
+          return new Response(JSON.stringify({ error: "推荐读取失败，请重试" }), {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return jsonResponse({
+          items: [{
+            source: "dish",
+            dishId: "dish-1",
+            recipeId: null,
+            name: "红烧肉",
+            categoryId: 1,
+            categoryKey: "肉类",
+            imageUrl: null,
+            timesCooked: 1,
+            sourceLabel: "饭盆 · 做过 1 次",
+          }],
+          warnings: [],
+        });
+      }
+      if (url.startsWith("/api/plans")) return jsonResponse([]);
+      throw new Error(`unexpected fetch: ${url}`);
+    }));
+
+    const props = {
+      dishes: [],
+      onDishClick: vi.fn(),
+      onRecipeClick: vi.fn(),
+      refresh: vi.fn(),
+      wishlistCount: 0,
+      onOpenWishlist: vi.fn(),
+    };
+    await act(async () => root.render(<TodayPage {...props} recommendationRevision={0} />));
+    await flush();
+    expect(container.textContent).toContain("推荐读取失败，请重试");
+
+    await act(async () => root.render(<TodayPage {...props} recommendationRevision={1} />));
+    await flush();
+    expect(container.textContent).toContain("红烧肉");
+    expect(container.textContent).not.toContain("推荐读取失败，请重试");
+  });
 });

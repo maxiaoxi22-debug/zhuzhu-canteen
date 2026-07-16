@@ -44,6 +44,7 @@ export default function TodayPage({
   const [todayPlans, setTodayPlans] = useState<MealPlan[]>([]);
   const [adding, setAdding] = useState("");
   const [message, setMessage] = useState("");
+  const [recommendationError, setRecommendationError] = useState("");
   const [recommendationWarning, setRecommendationWarning] = useState("");
 
   const fetchRecommendations = useCallback(async () => {
@@ -61,6 +62,7 @@ export default function TodayPage({
             return typeof warning.message === "string" ? [warning.message] : [];
           })
         : [];
+      setRecommendationError("");
       setRecommendationWarning(warningMessages.join("；"));
       setPool(items);
       setRecommendation((current) => {
@@ -72,7 +74,7 @@ export default function TodayPage({
       setRecommendationWarning("");
       setPool([]);
       setRecommendation(null);
-      setMessage(error instanceof Error ? error.message : "推荐读取失败，请重试");
+      setRecommendationError(error instanceof Error ? error.message : "推荐读取失败，请重试");
     }
   }, [randCat]);
 
@@ -197,6 +199,7 @@ export default function TodayPage({
         </div>
       </div>
 
+      {recommendationError && <p role="alert" className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-center text-xs text-[#806d67]">{recommendationError}</p>}
       {message && <p role="status" className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-center text-xs text-[#806d67]">{message}</p>}
       {recommendationWarning && <p role="status" className="mt-2 rounded-xl bg-[#fff8e8] px-3 py-2 text-center text-xs text-[#806d67]">{recommendationWarning}</p>}
 
