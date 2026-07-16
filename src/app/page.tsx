@@ -125,6 +125,26 @@ export default function Home() {
     else setSelectedDish(existing);
   };
 
+  const openCompletedDish = async (id: string) => {
+    let dish = dishes.find((item) => item.id === id) ?? null;
+    if (!dish) {
+      try {
+        const response = await fetch(`/api/dishes/${id}`);
+        if (response.ok) dish = await response.json() as Dish;
+      } catch {
+        // The completed-wish page already reports if its linked dish was deleted.
+      }
+    }
+    if (!dish) {
+      setToast("饭盆菜品暂时无法打开");
+      window.setTimeout(() => setToast(""), 1800);
+      return;
+    }
+    setTab("record");
+    setOverlayView(null);
+    setSelectedDish(dish);
+  };
+
   if (!dbReady) {
     return <div className="min-h-screen bg-white flex items-center justify-center text-sm text-gray-400">正在读取菜单...</div>;
   }
@@ -162,6 +182,7 @@ export default function Home() {
         <CompletedWishlistPage
           onClose={() => setOverlayView({ type: "wishlist" })}
           onOpenRecipe={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "completed" })}
+          onOpenDish={(dishId) => { void openCompletedDish(dishId); }}
         />
       )}
       {!overlayView && <>
@@ -200,7 +221,13 @@ export default function Home() {
       )}
       {deleteTarget && <DeleteDishDialog dish={deleteTarget} deleting={deleting} error={deleteError} onCancel={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(""); } }} onConfirm={confirmDelete} />}
       {toast && <div className="fixed left-1/2 top-6 z-[60] -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">{toast}</div>}
-      {wishlistCelebration && <WishlistCelebration completion={wishlistCelebration} onClose={() => setWishlistCelebration(null)} />}
+      {wishlistCelebration && (
+        <WishlistCelebration
+          completion={wishlistCelebration}
+          onReturnDish={() => { setWishlistCelebration(null); setTab("record"); }}
+          onOpenCompleted={() => { setWishlistCelebration(null); setOverlayView({ type: "completed" }); }}
+        />
+      )}
       </>}
       </div>
     </main>

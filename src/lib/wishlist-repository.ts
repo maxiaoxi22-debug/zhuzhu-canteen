@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 
 import type { createDatabase } from "../db";
-import { recipes, wishlistCompletions, wishlistItems } from "../db/schema";
+import { dishes, recipes, wishlistCompletions, wishlistItems } from "../db/schema";
 
 export type WishlistDatabase = ReturnType<typeof createDatabase>;
 
@@ -23,6 +23,7 @@ export interface WishlistCompletionView {
   wishlistItemId: string;
   recipeId: string | null;
   completedDishId: string | null;
+  dishExists: boolean;
   addedAt: string;
   completedAt: string;
   name: string;
@@ -166,16 +167,18 @@ export async function listWishlistCompletions(
   ownerId: string | null,
 ): Promise<WishlistCompletionView[]> {
   const rows = await database
-    .select()
+    .select({ completion: wishlistCompletions, linkedDishId: dishes.id })
     .from(wishlistCompletions)
+    .leftJoin(dishes, eq(dishes.id, wishlistCompletions.completedDishId))
     .where(completionOwnerCondition(ownerId))
     .orderBy(desc(wishlistCompletions.completedAt));
 
-  return rows.map((item) => ({
+  return rows.map(({ completion: item, linkedDishId }) => ({
     id: item.id,
     wishlistItemId: item.wishlistItemId,
     recipeId: item.recipeId,
     completedDishId: item.completedDishId,
+    dishExists: linkedDishId !== null,
     addedAt: item.addedAtSnapshot,
     completedAt: item.completedAt,
     name: item.nameSnapshot,

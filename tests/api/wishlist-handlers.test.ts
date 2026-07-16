@@ -58,6 +58,13 @@ describe("wishlist handlers", () => {
         'HowToCook','https://example.test/recipe-1','MIT','dishes/meat_dish/木樨肉.md','revision-1',
         'hash-1','https://example.test/recipe-1.jpg','2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
       );
+      INSERT INTO dishes (
+        id,name,name_key,category_id,image_url,ingredients,steps,recipe_id,wishlist_item_id,owner_id,
+        times_cooked,created_at,updated_at
+      ) VALUES (
+        'dish-completed','木樨肉','木樨肉',NULL,'dish.jpg','[]','[]','recipe-1',NULL,NULL,
+        1,'2026-07-11T00:00:00.000Z','2026-07-11T00:00:00.000Z'
+      );
       INSERT INTO wishlist_items VALUES (
         'wish-completed-old',NULL,'recipe-1',NULL,'木樨肉','肉类','completed',
         '2026-07-10T00:00:00.000Z','2026-07-11T00:00:00.000Z',NULL,
@@ -69,7 +76,7 @@ describe("wishlist handlers", () => {
         '2026-07-12T00:00:00.000Z','2026-07-15T00:00:00.000Z'
       );
       INSERT INTO wishlist_completions VALUES (
-        'completion-old',NULL,'wish-completed-old','recipe-1',NULL,
+        'completion-old',NULL,'wish-completed-old','recipe-1','dish-completed',
         '2026-07-10T00:00:00.000Z','2026-07-11T00:00:00.000Z','木樨肉','old.jpg','2026-07-11T00:00:00.000Z'
       );
       INSERT INTO wishlist_completions VALUES (
@@ -215,13 +222,26 @@ describe("wishlist handlers", () => {
     expect(row.rows[0].status).toBe("completed");
   });
 
-  it("lists permanent completion snapshots newest first", async () => {
+  it("lists permanent completion snapshots newest first with the linked dish state", async () => {
     const response = await completedHandler();
 
     expect(response.status).toBe(200);
-    const body = await response.json() as { items: Array<{ id: string; name: string; imageUrl: string }> };
+    const body = await response.json() as {
+      items: Array<{ id: string; name: string; imageUrl: string; completedDishId: string | null; dishExists: boolean }>;
+    };
     expect(body.items.map(({ id }) => id)).toEqual(["completion-new", "completion-old"]);
-    expect(body.items[0]).toMatchObject({ name: "番茄炒蛋", imageUrl: "new.jpg" });
+    expect(body.items[0]).toMatchObject({
+      name: "番茄炒蛋", imageUrl: "new.jpg", completedDishId: null, dishExists: false,
+    });
+    expect(body.items[1]).toMatchObject({
+      name: "木樨肉", imageUrl: "old.jpg", completedDishId: "dish-completed", dishExists: true,
+    });
+
+    await getClient().execute("DELETE FROM dishes WHERE id = 'dish-completed'");
+    const afterDelete = await listWishlistCompletions(database, null);
+    expect(afterDelete.find(({ id }) => id === "completion-old")).toMatchObject({
+      name: "木樨肉", imageUrl: "old.jpg", completedDishId: null, dishExists: false,
+    });
   });
 
   it("keeps repository reads, duplicates, and deletes isolated by owner", async () => {
