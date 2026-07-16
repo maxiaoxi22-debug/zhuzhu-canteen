@@ -109,36 +109,121 @@ function listItems(lines: string[]): string[] {
   }).filter(Boolean);
 }
 
+function numberCount(value: string): number {
+  return value.match(/\d+(?:\.\d+)?/g)?.length ?? 0;
+}
+
+export function isUnsafeAmountExpression(value: string): boolean {
+  if (numberCount(value) > 1) return true;
+  if (/[+*×]/.test(value)) return true;
+  if (/(?:\/\s*人|每(?:人|颗|份)|份数)/.test(value)) return true;
+  if (/\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*\s*(?:-|–|—|~|～|至|到|\/)\s*\d/u.test(value)) return true;
+  return /(?:大约|约|左右|至少|最多)\s*\d/.test(value);
+}
+
+function cleanIngredientName(value: string): string {
+  return value
+    .trim()
+    .replace(/(?:用量为|的数量)\s*[:：=]?\s*$/u, "")
+    .replace(/[：:,，=]\s*$/u, "")
+    .trim();
+}
+
+function splitIngredientAndAmount(value: string): { ingredientName: string; amountText: string } {
+  const numeric = value.match(/\d+(?:\.\d+)?/);
+  if (numeric?.index !== undefined) {
+    const prefix = value.slice(0, numeric.index);
+    const qualifier = prefix.match(/(?:大约|约|左右|至少|最多)\s*$/);
+    const amountIndex = qualifier?.index ?? numeric.index;
+    return {
+      ingredientName: cleanIngredientName(value.slice(0, amountIndex)),
+      amountText: value.slice(amountIndex).trim(),
+    };
+  }
+
+  const chineseQuantity = value.match(/^(.+?)([一二两三四五六七八九十半]\s*[\p{Script=Han}]{1,3})$/u);
+  if (chineseQuantity) {
+    return {
+      ingredientName: cleanIngredientName(chineseQuantity[1]),
+      amountText: chineseQuantity[2].trim(),
+    };
+  }
+
+  return { ingredientName: cleanIngredientName(value), amountText: "" };
+}
+
+function unsafeIngredient(
+  value: string,
+  optional: boolean,
+  note: string | null,
+): StagedIngredient {
+  const split = splitIngredientAndAmount(value);
+  return {
+    ingredientName: split.ingredientName || value,
+    amountValue: null,
+    amountUnit: null,
+    amountText: split.amountText,
+    optional,
+    note,
+  };
+}
+
 function parseIngredient(item: string): StagedIngredient {
   const optional = /(?:可选|按需|任选)/.test(item);
   const noteMatch = item.match(/[（(]([^）)]+)[）)]\s*$/);
-  const note = noteMatch ? noteMatch[1].trim() : null;
-  const withoutNote = noteMatch ? item.slice(0, noteMatch.index).trim() : item.trim();
-  const unsafeRange = withoutNote.match(
-    /\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*\s*(?:-|–|—|~|～|至|\/)\s*\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*/u,
-  ) ?? withoutNote.match(
-    /\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*(?:[^\d\n]{0,40})±\s*\d+(?:\.\d+)?\s*[\p{L}\p{Script=Han}]*/u,
-  );
-  if (unsafeRange) {
-    const ingredientName = withoutNote.slice(0, unsafeRange.index).trim().replace(/[：:,，]\s*$/u, "");
+  const quantitativeNote = noteMatch ? /\d/.test(noteMatch[1]) : false;
+
+  if (noteMatch && quantitativeNote) {
+    const beforeParentheses = item.slice(0, noteMatch.index).trim();
+    const parenthesesAmount = item.slice(noteMatch.index).trim();
+    const exact = noteMatch[1].trim().match(/^(\d+(?:\.\d+)?)\s*([\p{L}\p{Script=Han}]+)$/u);
+    if (exact && numberCount(item) === 1 && !isUnsafeAmountExpression(noteMatch[1])) {
+      return {
+        ingredientName: cleanIngredientName(beforeParentheses),
+        amountValue: Number(exact[1]),
+        amountUnit: exact[2],
+        amountText: parenthesesAmount,
+        optional,
+        note: null,
+      };
+    }
+
+    const base = splitIngredientAndAmount(beforeParentheses);
     return {
-      ingredientName: ingredientName || withoutNote,
+      ingredientName: base.ingredientName || beforeParentheses,
       amountValue: null,
       amountUnit: null,
-      amountText: ingredientName
-        ? withoutNote.slice(unsafeRange.index).replace(/\s+/g, " ").trim()
-        : "",
+      amountText: `${base.amountText}${parenthesesAmount}`,
+      optional,
+      note: null,
+    };
+  }
+
+  const note = noteMatch ? noteMatch[1].trim() : null;
+  const withoutNote = noteMatch ? item.slice(0, noteMatch.index).trim() : item.trim();
+  const formula = withoutNote.match(/^(.+?)\s*(=.+)$/);
+  if (formula && isUnsafeAmountExpression(formula[2])) {
+    return {
+      ingredientName: cleanIngredientName(formula[1]),
+      amountValue: null,
+      amountUnit: null,
+      amountText: formula[2].trim(),
       optional,
       note,
     };
   }
-  const formula = withoutNote.match(/^(.+?)\s*(=.+)$/);
-  if (formula && /[=×*\/]/.test(formula[2])) {
+  if (isUnsafeAmountExpression(withoutNote)) {
+    return unsafeIngredient(withoutNote, optional, note);
+  }
+  const amountFirst = withoutNote.match(
+    /^(\d+(?:\.\d+)?)\s*(kg|ml|mL|g|千克|毫升|人份|公分|汤匙|茶匙|克|斤|升|个|颗|枚|盒|片|根|瓣|勺|包|罐|碗|杯|块|只|条|把|株|张|份|滴|段)\s*(.+)$/u,
+  );
+  if (amountFirst) {
     return {
-      ingredientName: formula[1].trim().replace(/[：:]$/u, ""),
-      amountValue: null,
-      amountUnit: null,
-      amountText: formula[2].replace(/\s+/g, " ").trim(),
+      ingredientName: cleanIngredientName(amountFirst[3]),
+      amountValue: Number(amountFirst[1]),
+      amountUnit: amountFirst[2],
+      amountText: `${amountFirst[1]}${/^[a-zA-Z]+$/.test(amountFirst[2]) ? "" : " "}${amountFirst[2]}`,
       optional,
       note,
     };

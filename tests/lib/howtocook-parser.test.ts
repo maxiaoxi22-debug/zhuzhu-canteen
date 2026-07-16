@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { applyRecipesWishlistMigration } from "../../src/db/migrate";
 import { importStagedRecipes, resolveImportMode } from "../../scripts/howtocook/import";
-import { parseHowToCookMarkdown } from "../../scripts/howtocook/parse";
+import { isUnsafeAmountExpression, parseHowToCookMarkdown, type StagedRecipe } from "../../scripts/howtocook/parse";
 import { stageFromCheckout } from "../../scripts/howtocook/stage";
 
 const HOW_TO_COOK_REVISION = "753d4940fe06ce0d5ef767e8fe046c88635a391c";
@@ -116,6 +116,73 @@ describe("HowToCook markdown parser", () => {
     }));
   });
 
+  it("preserves real multi-quantity formulas and quantitative parentheses", () => {
+    const items = [
+      "豆角 300g * 2 人",
+      "米酒 10 + 25 ml",
+      "清水 720g + 600g",
+      "高度白酒 50ml + 水 150ml",
+      "青椒用量为 2 颗/人, 每颗 100g",
+      "饺子一包（根据个人食量选择，约 10 - 15 个）",
+      "清水（50ml）",
+      "生抽（40ml）",
+      "鲤鱼（大约 2 斤）",
+      "20 颗花椒",
+      "20 克白糖（根据个人口味调整）",
+    ];
+    const markdown = fixture.replace(
+      /每份：[\s\S]*?(?=\n## 操作)/,
+      `每份：\n\n${items.map((item) => `- ${item}`).join("\n")}\n`,
+    );
+    const parsed = parseHowToCookMarkdown({
+      path: "dishes/meat_dish/示例菜/示例菜.md",
+      markdown,
+      revision: HOW_TO_COOK_REVISION,
+    });
+
+    if ("failure" in parsed) throw new Error(parsed.failure);
+    for (const expected of [
+      { ingredientName: "豆角", amountText: "300g * 2 人" },
+      { ingredientName: "米酒", amountText: "10 + 25 ml" },
+      { ingredientName: "清水", amountText: "720g + 600g" },
+      { ingredientName: "高度白酒", amountText: "50ml + 水 150ml" },
+      { ingredientName: "青椒", amountText: "2 颗/人, 每颗 100g" },
+      { ingredientName: "饺子", amountText: "一包（根据个人食量选择，约 10 - 15 个）" },
+      { ingredientName: "鲤鱼", amountText: "（大约 2 斤）" },
+    ]) {
+      expect(parsed.ingredients).toContainEqual(expect.objectContaining({
+        ...expected,
+        amountValue: null,
+        amountUnit: null,
+      }));
+    }
+    expect(parsed.ingredients).toContainEqual(expect.objectContaining({
+      ingredientName: "清水",
+      amountText: "（50ml）",
+      amountValue: 50,
+      amountUnit: "ml",
+    }));
+    expect(parsed.ingredients).toContainEqual(expect.objectContaining({
+      ingredientName: "生抽",
+      amountText: "（40ml）",
+      amountValue: 40,
+      amountUnit: "ml",
+    }));
+    expect(parsed.ingredients).toContainEqual(expect.objectContaining({
+      ingredientName: "花椒",
+      amountText: "20 颗",
+      amountValue: 20,
+      amountUnit: "颗",
+    }));
+    expect(parsed.ingredients).toContainEqual(expect.objectContaining({
+      ingredientName: "白糖",
+      amountText: "20 克",
+      amountValue: 20,
+      amountUnit: "克",
+      note: "根据个人口味调整",
+    }));
+  });
+
   it("falls back to the required-items section when calculation has no list", () => {
     const markdown = fixture.replace(
       /每份：[\s\S]*?(?=\n## 操作)/,
@@ -199,6 +266,21 @@ describe("HowToCook staging", () => {
       "dishes/meat_dish/后一个/后一个.md",
     ]);
     expect(first.report).toMatchObject({ discovered: 3, parsed: 2, skipped: 1, fatalFailures: 0 });
+  });
+
+  it("does not publish structured values for unsafe generated amount expressions", () => {
+    const recipes = JSON.parse(readFileSync(
+      join(process.cwd(), "data/howtocook/recipes.json"),
+      "utf8",
+    )) as StagedRecipe[];
+    const violations = recipes.flatMap((recipe) => recipe.ingredients
+      .filter((ingredient) => ingredient.amountValue !== null && (
+        isUnsafeAmountExpression(`${ingredient.ingredientName} ${ingredient.amountText}`)
+        || /\d/.test(ingredient.note ?? "")
+      ))
+      .map((ingredient) => ({ sourcePath: recipe.sourcePath, ingredient })));
+
+    expect(violations).toEqual([]);
   });
 });
 
