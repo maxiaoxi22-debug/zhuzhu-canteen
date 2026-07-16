@@ -5,6 +5,8 @@ export interface Dish {
   imageUrl: string | null;
   ingredients: string;
   steps: string;
+  recipeId?: string | null;
+  wishlistItemId?: string | null;
   timesCooked: number;
   createdAt: string;
   updatedAt: string;
@@ -28,10 +30,48 @@ export interface MealPlan {
   date: string;
   mealType: string;
   dishId: string | null;
+  recipeId?: string | null;
+  wishlistItemId?: string | null;
+  sourceType?: string | null;
   notes: string | null;
   createdAt: string;
+  name?: string | null;
+  categoryId?: number | null;
+  categoryKey?: string | null;
+  imageUrl?: string | null;
   dish?: Dish | null;
 }
+
+export interface WishlistRecommendationInput {
+  id: string;
+  recipeId: string | null;
+  name: string;
+  categoryKey: string;
+  imageUrl: string | null;
+  status: "pending" | "completed";
+}
+
+interface RecommendationBase {
+  name: string;
+  categoryKey: string;
+  imageUrl: string | null;
+  recipeId: string | null;
+  sourceLabel: string;
+}
+
+export interface DishRecommendation extends RecommendationBase {
+  source: "dish";
+  dishId: string;
+  categoryId: number | null;
+  timesCooked: number;
+}
+
+export interface WishlistRecommendation extends RecommendationBase {
+  source: "wishlist";
+  wishlistItemId: string;
+}
+
+export type RecommendationItem = DishRecommendation | WishlistRecommendation;
 
 export interface HistoryEvent {
   id: string;

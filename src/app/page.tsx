@@ -18,7 +18,7 @@ export type Tab = "record" | "library" | "today" | "history";
 
 type OverlayView =
   | { type: "wishlist" }
-  | { type: "recipe"; recipeId: string; backTo: "wishlist" | "completed" }
+  | { type: "recipe"; recipeId: string; backTo: "wishlist" | "completed" | "today" }
   | { type: "completed" }
   | null;
 
@@ -144,7 +144,7 @@ export default function Home() {
       {overlayView?.type === "recipe" && (
         <RecipeDetail
           recipeId={overlayView.recipeId}
-          onBack={() => setOverlayView({ type: overlayView.backTo })}
+          onBack={() => setOverlayView(overlayView.backTo === "today" ? null : { type: overlayView.backTo })}
           onWishlistChanged={() => void fetchWishlistCount()}
         />
       )}
@@ -162,7 +162,7 @@ export default function Home() {
         <LibraryPage dishes={dishes} onDishClick={setSelectedDish} onDeleteDish={(dish) => { setDeleteError(""); setDeleteTarget(dish); }} />
       )}
       {tab === "today" && (
-        <TodayPage dishes={dishes} onDishClick={setSelectedDish} refresh={refresh} wishlistCount={wishlistCount} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
+        <TodayPage dishes={dishes} onDishClick={setSelectedDish} onRecipeClick={(recipeId) => setOverlayView({ type: "recipe", recipeId, backTo: "today" })} refresh={refresh} wishlistCount={wishlistCount} onOpenWishlist={() => setOverlayView({ type: "wishlist" })} />
       )}
       {tab === "history" && (
         <HistoryPage events={historyData.events} frequency={historyData.frequency} loading={historyLoading} onDishClick={setSelectedDish} />

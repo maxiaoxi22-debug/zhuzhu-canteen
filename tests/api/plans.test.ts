@@ -1,122 +1,117 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const BASE = "http://localhost:3000";
-let testDishId: string;
+import { createPlanHandlers } from "../../src/app/api/plans/route";
+import { applyRecipesWishlistMigration } from "../../src/db/migrate";
 
-describe("Plans API", () => {
-  const today = new Date().toISOString().slice(0, 10);
+describe("Plans API isolated handlers", () => {
+  let client: Client | undefined;
+  let tempDirectory: string | undefined;
+  let handlers: ReturnType<typeof createPlanHandlers>;
+  const today = "2026-07-17";
 
-  beforeAll(async () => {
-    // Create a test dish to use in plan tests
-    const res = await fetch(`${BASE}/api/dishes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "pytest_plan_dish",
-        categoryId: 1,
-        imageUrl: null,
-        ingredients: ["test"],
-        steps: ["test"],
-      }),
-    });
-    const data = await res.json();
-    testDishId = data.id;
+  beforeEach(async () => {
+    tempDirectory = await mkdtemp(join(tmpdir(), "plans-api-"));
+    client = createClient({ url: `file:${join(tempDirectory, "test.db")}` });
+    await client.executeMultiple(`
+      CREATE TABLE categories (
+        id integer PRIMARY KEY AUTOINCREMENT, name text NOT NULL,
+        sort_order integer NOT NULL DEFAULT 0, created_at text NOT NULL
+      );
+      CREATE TABLE dishes (
+        id text PRIMARY KEY, name text NOT NULL, name_key text UNIQUE, category_id integer,
+        image_url text, ingredients text NOT NULL DEFAULT '[]', steps text NOT NULL DEFAULT '[]',
+        times_cooked integer NOT NULL DEFAULT 0, created_at text NOT NULL, updated_at text NOT NULL
+      );
+      CREATE TABLE meal_plans (
+        id integer PRIMARY KEY AUTOINCREMENT, date text NOT NULL, meal_type text NOT NULL,
+        dish_id text REFERENCES dishes(id), notes text, created_at text NOT NULL
+      );
+      INSERT INTO dishes VALUES (
+        'dish-1','隔离测试菜','隔离测试菜',1,NULL,'[]','[]',0,
+        '2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
+      );
+    `);
+    await applyRecipesWishlistMigration(client);
+    handlers = createPlanHandlers(drizzle(client));
   });
 
-  afterAll(async () => {
-    if (testDishId) {
-      await fetch(`${BASE}/api/dishes?id=${testDishId}`, { method: "DELETE" });
+  afterEach(async () => {
+    try {
+      client?.close();
+    } finally {
+      if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true });
     }
   });
 
-  describe("POST /api/plans", () => {
-    it("should create a meal plan for breakfast", async () => {
-      const res = await fetch(`${BASE}/api/plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: today,
-          mealType: "breakfast",
-          dishId: testDishId,
-        }),
-      });
-      const data = await res.json();
-      expect(res.ok).toBe(true);
-      expect(data.success).toBe(true);
-    });
+  function post(mealType: string): Promise<Response> {
+    return handlers.POST(new Request("http://local.test/api/plans", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date: today, mealType, dishId: "dish-1" }),
+    }));
+  }
 
-    it("should create a meal plan for lunch", async () => {
-      const res = await fetch(`${BASE}/api/plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: today,
-          mealType: "lunch",
-          dishId: testDishId,
-        }),
-      });
-      expect(res.ok).toBe(true);
-    });
+  it.each(["breakfast", "lunch", "dinner"])("creates a %s dish plan", async (mealType) => {
+    const response = await post(mealType);
 
-    it("should create a meal plan for dinner", async () => {
-      const res = await fetch(`${BASE}/api/plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: today,
-          mealType: "dinner",
-          dishId: testDishId,
-        }),
-      });
-      const data = await res.json();
-      expect(res.ok).toBe(true);
-      expect(data.success).toBe(true);
-    });
-
-    it("should reject missing required fields", async () => {
-      const res = await fetch(`${BASE}/api/plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: today }),
-      });
-      expect(res.ok).toBe(false);
-    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true });
   });
 
-  describe("GET /api/plans", () => {
-    it("should return today's plans", async () => {
-      const res = await fetch(`${BASE}/api/plans?date=${today}`);
-      const data = await res.json();
-      expect(Array.isArray(data)).toBe(true);
-      expect(data.length).toBeGreaterThanOrEqual(1);
-      if (data.length > 0) {
-        expect(data[0].date).toBe(today);
-      }
-    });
+  it("rejects missing required fields", async () => {
+    const response = await handlers.POST(new Request("http://local.test/api/plans", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date: today, dishId: "dish-1" }),
+    }));
 
-    it("should return empty for a far future date", async () => {
-      const res = await fetch(`${BASE}/api/plans?date=2099-01-01`);
-      const data = await res.json();
-      expect(Array.isArray(data)).toBe(true);
-      expect(data.length).toBe(0);
-    });
+    expect(response.status).toBe(400);
   });
 
-  describe("DELETE /api/plans", () => {
-    it("should delete a meal plan", async () => {
-      const getRes = await fetch(`${BASE}/api/plans?date=${today}`);
-      const plans = await getRes.json();
-      if (plans.length > 0) {
-        const res = await fetch(`${BASE}/api/plans?id=${plans[0].id}`, { method: "DELETE" });
-        const data = await res.json();
-        expect(res.ok).toBe(true);
-        expect(data.success).toBe(true);
-      }
-    });
+  it("returns plans for the selected date with display fields", async () => {
+    await post("dinner");
 
-    it("should reject missing id", async () => {
-      const res = await fetch(`${BASE}/api/plans`, { method: "DELETE" });
-      expect(res.ok).toBe(false);
-    });
+    const response = await handlers.GET(new Request(`http://local.test/api/plans?date=${today}`));
+    const plans = await response.json() as Array<Record<string, unknown>>;
+
+    expect(response.status).toBe(200);
+    expect(plans).toMatchObject([{
+      date: today,
+      mealType: "dinner",
+      dishId: "dish-1",
+      sourceType: "dish",
+      name: "隔离测试菜",
+      categoryKey: "肉类",
+    }]);
+  });
+
+  it("returns empty for a date without plans", async () => {
+    const response = await handlers.GET(new Request("http://local.test/api/plans?date=2099-01-01"));
+
+    await expect(response.json()).resolves.toEqual([]);
+  });
+
+  it("deletes a plan", async () => {
+    await post("lunch");
+    const rows = await client!.execute("SELECT id FROM meal_plans");
+    const id = Number(rows.rows[0].id);
+
+    const response = await handlers.DELETE(new Request(`http://local.test/api/plans?id=${id}`, { method: "DELETE" }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true });
+    const remaining = await client!.execute("SELECT id FROM meal_plans");
+    expect(remaining.rows).toHaveLength(0);
+  });
+
+  it("rejects a delete without id", async () => {
+    const response = await handlers.DELETE(new Request("http://local.test/api/plans", { method: "DELETE" }));
+
+    expect(response.status).toBe(400);
   });
 });
