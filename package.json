@@ -10,6 +10,9 @@
     "test": "vitest run tests/lib tests/config",
     "test:watch": "vitest tests/lib tests/config",
     "test:api": "node -e \"console.error('API tests are blocked until an isolated test database and test server are configured.'); process.exit(1)\"",
+    "test:db": "vitest run tests/db",
+    "db:migrate:recipes": "tsx scripts/db/migrate-recipes-wishlist.ts",
+    "db:backup": "tsx scripts/db/export-backup.ts",
     "seed": "npx tsx src/db/seed.ts"
   },
   "dependencies": {

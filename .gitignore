@@ -8,3 +8,5 @@ drizzle
 .env*
 .worktrees
 .superpowers
+backups/
+*.tsbuildinfo
