@@ -39,6 +39,7 @@ describe("completed wishlist UI behavior", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -79,7 +80,7 @@ describe("completed wishlist UI behavior", () => {
     expect(onOpenRecipe).toHaveBeenCalledWith("recipe-2");
   });
 
-  it("offers explicit destinations after a wish completes", async () => {
+  it("returns to the dish basin from a fresh celebration mount", async () => {
     const onReturnDish = vi.fn();
     const onOpenCompleted = vi.fn();
     await act(async () => root.render(
@@ -91,8 +92,44 @@ describe("completed wishlist UI behavior", () => {
     ));
 
     await act(async () => button(container, "返回饭盆").click());
-    await act(async () => button(container, "查看已完成心愿").click());
     expect(onReturnDish).toHaveBeenCalledOnce();
+    expect(onOpenCompleted).not.toHaveBeenCalled();
+  });
+
+  it("opens completed wishes from a separate celebration mount", async () => {
+    const onReturnDish = vi.fn();
+    const onOpenCompleted = vi.fn();
+    await act(async () => root.render(
+      <WishlistCelebration
+        completion={{ id: "wish-2", name: "番茄炒蛋", imageUrl: null }}
+        onReturnDish={onReturnDish}
+        onOpenCompleted={onOpenCompleted}
+      />,
+    ));
+
+    await act(async () => button(container, "查看已完成心愿").click());
+    expect(onReturnDish).not.toHaveBeenCalled();
     expect(onOpenCompleted).toHaveBeenCalledOnce();
+  });
+
+  it("stays visible after the former 2.6 second auto-dismiss window", async () => {
+    vi.useFakeTimers();
+    const onReturnDish = vi.fn();
+    const onOpenCompleted = vi.fn();
+    const compatibilityProps = {
+      completion: { id: "wish-3", name: "糖醋排骨", imageUrl: null },
+      onReturnDish,
+      onOpenCompleted,
+      // Lets this regression test prove that the former onClose timer would fire.
+      onClose: onReturnDish,
+    };
+    await act(async () => root.render(
+      <WishlistCelebration {...compatibilityProps} />,
+    ));
+
+    await act(async () => { vi.advanceTimersByTime(2_700); });
+    expect(container.textContent).toContain("心愿完成啦！");
+    expect(onReturnDish).not.toHaveBeenCalled();
+    expect(onOpenCompleted).not.toHaveBeenCalled();
   });
 });
