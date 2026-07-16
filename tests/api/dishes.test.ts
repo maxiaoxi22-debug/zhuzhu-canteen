@@ -1,117 +1,118 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, afterAll } from "vitest";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const BASE = "http://localhost:3000";
-const createdIds: string[] = [];
+import { createDishHandlers } from "../../src/app/api/dishes/route";
+import type { DishWishlistDatabase } from "../../src/lib/dish-wishlist-transaction";
 
-async function createDish(overrides: Record<string, any> = {}) {
-  const res = await fetch(`${BASE}/api/dishes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: "pytest_dish",
-      categoryId: 1,
-      imageUrl: null,
-      ingredients: ["食材A", "食材B"],
-      steps: ["步骤1", "步骤2"],
-      ...overrides,
-    }),
+describe("Dishes API isolated handlers", () => {
+  let client: Client | undefined;
+  let tempDirectory: string | undefined;
+  let handlers: ReturnType<typeof createDishHandlers>;
+
+  beforeEach(async () => {
+    tempDirectory = await mkdtemp(join(tmpdir(), "dishes-api-"));
+    client = createClient({ url: `file:${join(tempDirectory, "test.db")}` });
+    await client.executeMultiple(`
+      CREATE TABLE categories (id integer PRIMARY KEY, name text NOT NULL);
+      CREATE TABLE recipes (id text PRIMARY KEY, name text NOT NULL, name_key text NOT NULL, category_key text NOT NULL, image_url text);
+      CREATE TABLE dishes (
+        id text PRIMARY KEY, name text NOT NULL, name_key text UNIQUE, category_id integer,
+        image_url text, ingredients text NOT NULL DEFAULT '[]', steps text NOT NULL DEFAULT '[]',
+        recipe_id text, wishlist_item_id text, owner_id text, times_cooked integer NOT NULL DEFAULT 0,
+        created_at text NOT NULL, updated_at text NOT NULL
+      );
+      CREATE TABLE wishlist_items (
+        id text PRIMARY KEY, owner_id text, recipe_id text, custom_name text, name_key text NOT NULL,
+        category_key text NOT NULL, status text NOT NULL, added_at text NOT NULL, completed_at text,
+        completed_dish_id text, created_at text NOT NULL, updated_at text NOT NULL
+      );
+      CREATE TABLE wishlist_completions (
+        id text PRIMARY KEY, owner_id text, wishlist_item_id text NOT NULL, recipe_id text,
+        completed_dish_id text, added_at_snapshot text NOT NULL, completed_at text NOT NULL,
+        name_snapshot text NOT NULL, image_url_snapshot text, created_at text NOT NULL
+      );
+      INSERT INTO categories VALUES (1, '肉类');
+      INSERT INTO recipes VALUES ('recipe-1', '木樨肉', '木樨肉', '肉类', 'recipe.jpg');
+      INSERT INTO wishlist_items VALUES (
+        'wish-1', NULL, 'recipe-1', NULL, '木樨肉', '肉类', 'pending',
+        '2026-07-01T00:00:00.000Z', NULL, NULL,
+        '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z'
+      );
+    `);
+    handlers = createDishHandlers(drizzle(client) as DishWishlistDatabase);
   });
-  const data = await res.json();
-  if (data.id) createdIds.push(data.id);
-  return { res, data };
-}
 
-describe("Dishes API", () => {
-  afterAll(async () => {
-    for (const id of createdIds) {
-      try { await fetch(`${BASE}/api/dishes?id=${id}`, { method: "DELETE" }); } catch {}
+  afterEach(async () => {
+    try {
+      client?.close();
+    } finally {
+      if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true });
     }
   });
 
-  describe("POST /api/dishes", () => {
-    it("should create a dish with valid data", async () => {
-      const { res, data } = await createDish({ name: "pytest_红烧排骨" });
-      expect(res.ok).toBe(true);
-      expect(data.id).toBeDefined();
+  function post(overrides: Record<string, unknown> = {}): Promise<Response> {
+    return handlers.POST(new Request("http://local.test/api/dishes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "木樨肉",
+        categoryId: 1,
+        imageUrl: "cooked.jpg",
+        ingredients: ["鸡蛋"],
+        steps: ["炒熟"],
+        ...overrides,
+      }),
+    }));
+  }
+
+  it("creates a dish without touching a pending wish by default", async () => {
+    const response = await post();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ id: expect.any(String) });
+    const wish = await client!.execute("SELECT status FROM wishlist_items WHERE id='wish-1'");
+    expect(wish.rows[0].status).toBe("pending");
+  });
+
+  it("returns a server-owned celebration payload only after atomic completion", async () => {
+    const response = await post({
+      recipeId: "recipe-1",
+      wishlistItemId: "wish-1",
+      completeWishlist: true,
     });
 
-    it("should create a dish with null categoryId", async () => {
-      const { data } = await createDish({ name: "pytest_无分类菜", categoryId: null });
-      expect(data.id).toBeDefined();
-    });
-
-    it("should create a dish with empty ingredients and steps", async () => {
-      const { data } = await createDish({ name: "pytest_空白菜", ingredients: [], steps: [] });
-      expect(data.id).toBeDefined();
-    });
-
-    it("should create a dish with long name", async () => {
-      const { data } = await createDish({ name: "pytest_这是一个非常长的菜品名称用来测试边界条件" });
-      expect(data.id).toBeDefined();
-    });
-
-    it("should reject empty name", async () => {
-      const { res, data } = await createDish({ name: "" });
-      expect(res.ok).toBe(false);
-      expect(res.status).toBe(400);
-      expect(data.error).toBeDefined();
-    });
-
-    it("should reject missing name", async () => {
-      const { res, data } = await createDish({ name: undefined });
-      expect(res.ok).toBe(false);
-      expect(res.status).toBe(400);
-    });
-
-    it("should reject whitespace-only name", async () => {
-      const { res, data } = await createDish({ name: "   " });
-      expect(res.ok).toBe(false);
-      expect(res.status).toBe(400);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: expect.any(String),
+      wishlistCompletion: { id: "wish-1", name: "木樨肉", imageUrl: "cooked.jpg" },
     });
   });
 
-  describe("GET /api/dishes", () => {
-    it("should return an array", async () => {
-      const res = await fetch(`${BASE}/api/dishes`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      expect(Array.isArray(data)).toBe(true);
-    });
+  it("rejects invalid names and recipes", async () => {
+    expect((await post({ name: "   " })).status).toBe(400);
+    expect((await post({ recipeId: "missing" })).status).toBe(400);
+  });
 
-    it("should be sorted by createdAt desc", async () => {
-      const res = await fetch(`${BASE}/api/dishes`);
-      const data = await res.json();
-      if (data.length >= 2) {
-        const dates = data.map((d: any) => new Date(d.createdAt).getTime());
-        for (let i = 0; i < dates.length - 1; i++) {
-          expect(dates[i]).toBeGreaterThanOrEqual(dates[i + 1]);
-        }
-      }
-    });
+  it("returns a 409 with duplicate match details", async () => {
+    expect((await post()).status).toBe(200);
+    const duplicate = await post({ name: "木 樨 肉" });
 
-    it("should filter by category", async () => {
-      const res = await fetch(`${BASE}/api/dishes?cat=1`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      for (const d of data) {
-        expect(d.categoryId).toBe(1);
-      }
+    expect(duplicate.status).toBe(409);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      error: "菜单库已有这道菜",
+      match: { name: "木樨肉" },
     });
+  });
 
-    it("should return empty for non-existent category", async () => {
-      const res = await fetch(`${BASE}/api/dishes?cat=999`);
-      const data = await res.json();
-      expect(data.length).toBe(0);
-    });
+  it("lists dishes from the injected database", async () => {
+    await post({ name: "隔离测试菜" });
+    const response = await handlers.GET(new Request("http://local.test/api/dishes?q=隔离"));
 
-    it("should search by name", async () => {
-      const res = await fetch(`${BASE}/api/dishes?q=pytest`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      for (const d of data) {
-        expect(d.name).toContain("pytest");
-      }
-    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject([{ name: "隔离测试菜" }]);
   });
 });

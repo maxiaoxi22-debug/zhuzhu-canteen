@@ -1,4 +1,4 @@
-import { normalizeRecipeName } from "./recipe-normalize";
+import { normalizeDishName } from "./dish-name-match";
 
 export interface WishlistMatchItem {
   id: string;
@@ -24,7 +24,7 @@ export function findPendingWishlistMatch<T extends WishlistMatchItem>(
     if (recipeMatch) return recipeMatch;
   }
 
-  const nameKey = normalizeRecipeName(candidate.name);
+  const nameKey = normalizeDishName(candidate.name);
   return pendingItems.find((item) =>
-    item.nameKey === nameKey && item.categoryKey === candidate.categoryKey) ?? null;
+    normalizeDishName(item.nameKey) === nameKey && item.categoryKey === candidate.categoryKey) ?? null;
 }

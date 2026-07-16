@@ -1,41 +1,87 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useState, useRef } from "react";
-import { CATEGORIES, Dish, DishDuplicateMatch } from "@/lib/types";
-import { categoryIdFromKey, DishSaveError, readDishSaveResult } from "@/lib/dish-form";
+
+import { useEffect, useRef, useState } from "react";
+
+import {
+  applyRecognitionCandidate,
+  buildWishlistCompletionFields,
+  categoryIdFromKey,
+  createLatestTaskGuard,
+  DishSaveError,
+  saveDishOnce,
+} from "@/lib/dish-form";
+import { normalizeDishName } from "@/lib/dish-name-match";
 import { compressImage } from "@/lib/image-compression";
-import { mergeRecipeFields, RecipeSuggestion } from "@/lib/recipe-fallback";
+import { mergeRecipeFields, type RecipeSuggestion } from "@/lib/recipe-fallback";
+import { findPendingWishlistMatch } from "@/lib/wishlist-domain";
+import {
+  CATEGORIES,
+  type CategoryKey,
+  type Dish,
+  type DishDuplicateMatch,
+  type RecognitionResult,
+} from "@/lib/types";
+
+import WishlistCompletionDialog, { type WishlistCompletionChoice } from "./WishlistCompletionDialog";
+
+interface PendingWishlistItem extends WishlistCompletionChoice {
+  recipeId: string | null;
+  nameKey: string;
+  categoryKey: string;
+  status: "pending" | "completed";
+}
+
+type PendingWishlistResponseItem = Omit<PendingWishlistItem, "nameKey">;
+
+function parseLines(value: string): string {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String).join("\n") : value || "";
+  } catch {
+    return value || "";
+  }
+}
 
 export default function AddDishForm({
-  dish, onClose, onSaved, onOpenExisting,
-}: { dishes: Dish[]; dish?: Dish; onClose: () => void; onSaved: () => void; onOpenExisting: (id: string, mode: "detail" | "edit") => void }) {
-  const parseLines = (value: string): string => {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed.map(String).join("\n") : value || "";
-    } catch { return value || ""; }
-  };
+  dish,
+  onClose,
+  onSaved,
+  onOpenExisting,
+}: {
+  dishes: Dish[];
+  dish?: Dish;
+  onClose: () => void;
+  onSaved: (completion?: WishlistCompletionChoice) => void;
+  onOpenExisting: (id: string, mode: "detail" | "edit") => void;
+}) {
   const [image, setImage] = useState<string | null>(dish?.imageUrl || null);
   const [file, setFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState(dish?.imageUrl || "");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [aiSuccess, setAiSuccess] = useState(false);
-  const [imageUrl, setImageUrl] = useState(dish?.imageUrl || "");
+  const [recognitionCandidates, setRecognitionCandidates] = useState<RecognitionResult["candidates"]>([]);
+  const [visibleIngredients, setVisibleIngredients] = useState<string[]>([]);
 
   const [editName, setEditName] = useState(dish?.name || "");
   const [editCat, setEditCat] = useState(dish?.categoryId ? CATEGORIES[dish.categoryId]?.key || "其他" : "其他");
   const [editIngs, setEditIngs] = useState(() => dish ? parseLines(dish.ingredients) : "");
   const [editSteps, setEditSteps] = useState(() => dish ? parseLines(dish.steps) : "");
+  const [categoryTouched, setCategoryTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateMessage, setGenerateMessage] = useState("");
-  const [categoryTouched, setCategoryTouched] = useState(false);
   const [duplicateMatch, setDuplicateMatch] = useState<DishDuplicateMatch | null>(null);
   const [duplicateChecking, setDuplicateChecking] = useState(false);
   const [duplicateCheckError, setDuplicateCheckError] = useState("");
+  const [completionCandidate, setCompletionCandidate] = useState<PendingWishlistItem | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const uploadGuardRef = useRef(createLatestTaskGuard());
 
   useEffect(() => {
     const name = editName.trim();
@@ -61,15 +107,42 @@ export default function AddDishForm({
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [editName, dish]);
 
-  const handleFile = async (f: File) => {
-    const optimized = await compressImage(f);
-    setFile(optimized);
-    setAiError("");
-    setAiSuccess(false);
+  const handleFile = async (selectedFile: File) => {
+    const revision = uploadGuardRef.current.begin();
+    setUploading(true);
+    setFile(null);
+    setImage(null);
     setImageUrl("");
-    const reader = new FileReader();
-    reader.onload = (e) => setImage(e.target?.result as string);
-    reader.readAsDataURL(optimized);
+    setUploadError("");
+    setAiLoading(false);
+    setAiError("");
+    setRecognitionCandidates([]);
+    setVisibleIngredients([]);
+
+    try {
+      const optimized = await compressImage(selectedFile);
+      if (!uploadGuardRef.current.isCurrent(revision)) return;
+      setFile(optimized);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (uploadGuardRef.current.isCurrent(revision)) setImage(event.target?.result as string);
+      };
+      reader.readAsDataURL(optimized);
+
+      const formData = new FormData();
+      formData.append("image", optimized);
+      const response = await fetch("/api/uploads/dish-photo", { method: "POST", body: formData });
+      const result = await response.json() as { imageUrl?: string; error?: string };
+      if (!uploadGuardRef.current.isCurrent(revision)) return;
+      if (!response.ok || !result.imageUrl) throw new Error(result.error || "照片上传失败");
+      setImageUrl(result.imageUrl);
+    } catch (error) {
+      if (uploadGuardRef.current.isCurrent(revision)) {
+        setUploadError(error instanceof Error ? error.message : "照片上传失败，请重试");
+      }
+    } finally {
+      if (uploadGuardRef.current.isCurrent(revision)) setUploading(false);
+    }
   };
 
   const handleGenerateRecipe = async () => {
@@ -96,62 +169,53 @@ export default function AddDishForm({
     }
   };
 
+  const handleCandidateClick = (candidate: RecognitionResult["candidates"][number]) => {
+    const next = applyRecognitionCandidate(editCat, categoryTouched, candidate);
+    setEditName(next.name);
+    setDuplicateMatch(null);
+    setDuplicateCheckError("");
+    setEditCat(next.category);
+  };
+
   const handleRecognize = async () => {
-    if (!file) return;
+    if (!file || !imageUrl) return;
+    const recognitionRevision = uploadGuardRef.current.current();
     setAiLoading(true);
     setAiError("");
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const res = await fetch("/api/recognize", { method: "POST", body: formData });
-      const data = await res.json();
-      // Always capture imageUrl from upload
-      if (data.imageUrl) setImageUrl(data.imageUrl);
-      // Check if AI recognition failed
-      if (data.aiFailed || !res.ok || data.error) {
-        setAiError(data.error || "AI 识别失败，请手动填写信息。照片已自动保存。");
-        return;
+      const response = await fetch("/api/recognize", { method: "POST", body: formData });
+      const result = await response.json() as Partial<RecognitionResult> & { error?: string };
+      if (!uploadGuardRef.current.isCurrent(recognitionRevision)) return;
+      if (!response.ok || result.error) throw new Error(result.error || "AI 识别失败，请手动输入");
+      setRecognitionCandidates(Array.isArray(result.candidates) ? result.candidates : []);
+      setVisibleIngredients(Array.isArray(result.visibleIngredients) ? result.visibleIngredients : []);
+    } catch (error) {
+      if (uploadGuardRef.current.isCurrent(recognitionRevision)) {
+        setAiError(error instanceof Error ? error.message : "网络错误，请手动输入");
       }
-      setEditName(data.name || "");
-      setEditCat(data.category || "肉类");
-      setEditIngs(Array.isArray(data.ingredients) ? data.ingredients.join("\n") : "");
-      setEditSteps(Array.isArray(data.steps) ? data.steps.join("\n") : "");
-      setAiSuccess(true);
-    } catch {
-      setAiError("网络错误，请手动输入");
     } finally {
-      setAiLoading(false);
+      if (uploadGuardRef.current.isCurrent(recognitionRevision)) setAiLoading(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!editName.trim()) return;
+  const handleSaveResponse = async (candidate: PendingWishlistItem | null, completeWishlist: boolean) => {
     setSaving(true);
     setSaveError("");
-
     try {
-      let finalImageUrl = imageUrl;
-      if (file && !finalImageUrl) {
-        const formData = new FormData();
-        formData.append("image", file);
-        const res = await fetch("/api/recognize", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.imageUrl) finalImageUrl = data.imageUrl;
-      }
-
-      const response = await fetch(dish ? `/api/dishes/${dish.id}` : "/api/dishes", {
-        method: dish ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editName.trim(),
-          categoryId: categoryIdFromKey(editCat),
-          imageUrl: finalImageUrl || null,
-          ingredients: editIngs.split("\n").map((item) => item.trim()).filter(Boolean),
-          steps: editSteps.split("\n").map((item) => item.trim()).filter(Boolean),
-        }),
+      const completionFields = candidate
+        ? buildWishlistCompletionFields(candidate, completeWishlist)
+        : { completeWishlist: false };
+      const result = await saveDishOnce(fetch, dish ? `/api/dishes/${dish.id}` : "/api/dishes", dish ? "PUT" : "POST", {
+        name: editName.trim(),
+        categoryId: categoryIdFromKey(editCat),
+        imageUrl: imageUrl || null,
+        ingredients: editIngs.split("\n").map((item) => item.trim()).filter(Boolean),
+        steps: editSteps.split("\n").map((item) => item.trim()).filter(Boolean),
+        ...completionFields,
       });
-      await readDishSaveResult(response);
-      onSaved();
+      onSaved(result.wishlistCompletion);
     } catch (error) {
       if (error instanceof DishSaveError && error.match) setDuplicateMatch(error.match);
       setSaveError(error instanceof Error ? error.message : "保存失败，请重试");
@@ -160,124 +224,126 @@ export default function AddDishForm({
     }
   };
 
-  const canSave = Boolean(editName.trim() && (file || imageUrl) && !duplicateMatch);
+  const handleSave = async () => {
+    if (!editName.trim() || !imageUrl || saving) return;
+    if (dish) {
+      await handleSaveResponse(null, false);
+      return;
+    }
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/wishlist?status=pending");
+      if (!response.ok) throw new Error("心愿单暂时不可用");
+      const data = await response.json() as { items?: PendingWishlistResponseItem[] };
+      const items = (data.items || []).map((item) => ({ ...item, nameKey: normalizeDishName(item.name) }));
+      const match = findPendingWishlistMatch(items, {
+        recipeId: null,
+        name: editName,
+        categoryKey: editCat as CategoryKey,
+      });
+      if (match) {
+        setCompletionCandidate(match);
+        return;
+      }
+    } catch {
+      // A temporary wishlist read failure must not prevent saving the cooked dish.
+    } finally {
+      setSaving(false);
+    }
+    await handleSaveResponse(null, false);
+  };
+
+  const chooseCompletion = async (completeWishlist: boolean) => {
+    const candidate = completionCandidate;
+    if (!candidate) return;
+    await handleSaveResponse(candidate, completeWishlist);
+  };
+
+  const canSave = Boolean(editName.trim() && imageUrl && !uploading && !duplicateMatch);
 
   return (
     <div className="fixed inset-0 z-30 flex items-end bg-[#36251f57] backdrop-blur-[2px]" onClick={onClose}>
-      <div className="animate-slide-up max-h-[90%] w-full overflow-y-auto rounded-t-[1.8rem] bg-[var(--paper)] text-[var(--cocoa)]" onClick={(e) => e.stopPropagation()}>
-        <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3" />
+      <div className="animate-slide-up max-h-[90%] w-full overflow-y-auto rounded-t-[1.8rem] bg-[var(--paper)] text-[var(--cocoa)]" onClick={(event) => event.stopPropagation()}>
+        <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-gray-300" />
         <div className="p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-          <h2 className="mb-4 text-lg font-bold text-[var(--cocoa)]">{dish ? "✏️ 编辑菜品" : "📸 记录一道菜"}</h2>
+          <h2 className="mb-4 text-lg font-bold">{dish ? "✏️ 编辑菜品" : "📸 记录一道菜"}</h2>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void handleFile(event.target.files[0])} />
 
-          <input ref={fileRef} type="file" accept="image/*" className="hidden"
-            onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} />
-
-          {/* Photo area */}
-          <button onClick={() => fileRef.current?.click()}
-            className="w-full h-48 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-gray-200 bg-gray-50 active:bg-gray-100 transition overflow-hidden">
-            {image ? (
-              <img src={image} alt="预览" className="w-full h-full rounded-2xl object-cover" />
-            ) : (
-              <>
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#fff0eb]">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef6865" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                </div>
-                <p className="text-sm text-gray-600 font-medium">拍照或从相册选择</p>
-                <p className="text-xs text-gray-400 mt-1">拍摄成品菜照片</p>
-              </>
-            )}
+          <button type="button" onClick={() => fileRef.current?.click()} className="flex h-48 w-full flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 transition active:bg-gray-100">
+            {image ? <img src={image} alt="预览" className="h-full w-full rounded-2xl object-cover" /> : <>
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#fff0eb] text-2xl">📷</div>
+              <p className="text-sm font-medium text-gray-600">拍照或从相册选择</p>
+              <p className="mt-1 text-xs text-gray-400">拍摄成品菜照片</p>
+            </>}
           </button>
+          {uploading && <p className="mt-2 text-center text-xs text-gray-400">正在保存照片...</p>}
+          {uploadError && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-600">{uploadError}，请重新选择照片。</div>}
 
-          {/* AI recognize button */}
-          {image && !aiSuccess && (
-            <div className="mt-4">
-              <button onClick={handleRecognize} disabled={aiLoading}
-                className="w-full rounded-2xl bg-[var(--coral)] py-3.5 text-sm font-semibold text-white transition active:bg-[var(--coral-dark)] disabled:opacity-50">
-                {aiLoading ? "🤖 AI 识别中..." : "🤖 AI 智能识别（可选）"}
-              </button>
-              <p className="text-xs text-gray-400 text-center mt-2">也可以跳过 AI，直接手动填写下方信息</p>
+          {image && <div className="mt-4">
+            <button type="button" onClick={handleRecognize} disabled={aiLoading || uploading || !imageUrl} className="w-full rounded-2xl bg-[var(--coral)] py-3.5 text-sm font-semibold text-white disabled:opacity-50">
+              {aiLoading ? "🤖 AI 识别中..." : "🤖 AI 智能识别（可选）"}
+            </button>
+            <p className="mt-2 text-center text-xs text-gray-400">照片保存后可识别，也可以直接手动填写</p>
+          </div>}
+          {aiError && <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">⚠️ {aiError}，照片已正常保存。</div>}
+
+          {recognitionCandidates.length > 0 && <section className="mt-4 rounded-2xl border border-[#f2d6cf] bg-[#fff8f5] p-4">
+            <p className="text-sm font-semibold">识别结果更像哪一道？</p>
+            <div className="mt-3 grid gap-2">
+              {recognitionCandidates.map((candidate) => <button key={`${candidate.name}-${candidate.category}`} type="button" onClick={() => handleCandidateClick(candidate)} className="rounded-xl border border-[#f3c9bf] bg-white px-3 py-2.5 text-left text-sm">
+                <span className="font-semibold">{candidate.name}</span><span className="ml-2 text-xs text-gray-400">{candidate.category}</span>
+              </button>)}
+              <button type="button" onClick={() => { setRecognitionCandidates([]); nameRef.current?.focus(); }} className="rounded-xl py-2 text-sm text-gray-500">都不对，手动输入</button>
             </div>
-          )}
+          </section>}
 
-          {/* AI error */}
-          {aiError && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4">
-              <p className="text-sm font-semibold text-red-600 mb-1">⚠️ AI 识别失败</p>
-              <p className="text-xs text-red-500">{aiError}</p>
-              <p className="text-xs text-red-400 mt-2">请在下方手动填写菜品信息，照片会正常保存</p>
-            </div>
-          )}
+          {visibleIngredients.length > 0 && <section className="mt-3 rounded-2xl bg-[#f2f8ef] p-4">
+            <p className="text-xs font-semibold text-[var(--green)]">识别到的可见食材（仅供参考）</p>
+            <div className="mt-2 flex flex-wrap gap-2">{visibleIngredients.map((ingredient) => <span key={ingredient} className="rounded-full bg-white px-3 py-1.5 text-xs text-gray-600">{ingredient}</span>)}</div>
+          </section>}
 
-          {aiSuccess && (
-            <div className="mt-4 rounded-2xl border border-[#dbe9d5] bg-[#f2f8ef] p-3">
-              <p className="text-sm font-semibold text-[var(--green)]">✅ AI 识别完成，请确认或修改</p>
-            </div>
-          )}
-
-          {/* Manual input fields - show after photo selected */}
-          {image && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-gray-400 font-medium">菜品名称 *</label>
-                <input value={editName} onChange={(e) => { setEditName(e.target.value); setDuplicateMatch(null); setDuplicateCheckError(""); }} placeholder="例：红烧排骨"
-                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#ef68654d]" />
-                {duplicateChecking && <p className="text-xs text-gray-400 mt-2">正在检查菜单库...</p>}
-                {duplicateCheckError && <p className="text-xs text-amber-600 mt-2">{duplicateCheckError}</p>}
-                {duplicateMatch && (
-                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                    <p className="text-sm font-semibold text-amber-700">{duplicateMatch.message}：{duplicateMatch.name}</p>
-                    <div className="flex gap-2 mt-2">
-                      <button type="button" onClick={() => onOpenExisting(duplicateMatch.id, "detail")} className="flex-1 rounded-lg bg-white border border-amber-200 py-2 text-xs text-amber-700">查看已有菜品</button>
-                      <button type="button" onClick={() => onOpenExisting(duplicateMatch.id, "edit")} className="flex-1 rounded-lg bg-amber-500 py-2 text-xs text-white">编辑已有菜品</button>
-                    </div>
-                  </div>
-                )}
-                <button type="button" onClick={handleGenerateRecipe} disabled={!editName.trim() || generating}
-                  className="w-full mt-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40">
-                  {generating ? "正在生成..." : "✨ 根据菜名生成参考用料和做法"}
-                </button>
-                {generateMessage && <p className="text-xs text-amber-600 mt-2">{generateMessage}</p>}
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 font-medium">分类</label>
-                <select value={editCat} onChange={(e) => { setEditCat(e.target.value); setCategoryTouched(true); }}
-                  className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm mt-1 border border-gray-100 outline-none">
-                  {CATEGORIES.filter((c) => c.key !== "all").map((c) => (
-                    <option key={c.key} value={c.key}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 font-medium">食材清单（每行一个）</label>
-                <textarea value={editIngs} onChange={(e) => setEditIngs(e.target.value)} rows={4}
-                  placeholder={"例：\n排骨 500g\n生抽 2勺\n老抽 1勺\n冰糖 15g"}
-                  className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm mt-1 border border-gray-100 outline-none focus:ring-2 focus:ring-green-300 resize-none" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 font-medium">做法步骤（每行一步）</label>
-                <textarea value={editSteps} onChange={(e) => setEditSteps(e.target.value)} rows={5}
-                  placeholder={"例：\n排骨冷水下锅焯水去血沫\n炒糖色下排骨翻炒上色\n加调料和热水炖40分钟\n大火收汁出锅"}
-                  className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm mt-1 border border-gray-100 outline-none focus:ring-2 focus:ring-green-300 resize-none" />
-              </div>
-            </div>
-          )}
-
-          {/* Save button */}
-          {canSave && (
-            <>
-              {saveError && (
-                <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-3 text-sm text-red-600">
-                  保存失败：{saveError}。你填写的内容仍保留，请稍后重试。
+          {image && <div className="mt-4 space-y-3">
+            <div>
+              <label className="text-xs font-medium text-gray-400">菜品名称 *</label>
+              <input ref={nameRef} value={editName} onChange={(event) => { setEditName(event.target.value); setDuplicateMatch(null); setDuplicateCheckError(""); }} placeholder="例：红烧排骨" className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#ef68654d]" />
+              {duplicateChecking && <p className="mt-2 text-xs text-gray-400">正在检查菜单库...</p>}
+              {duplicateCheckError && <p className="mt-2 text-xs text-amber-600">{duplicateCheckError}</p>}
+              {duplicateMatch && <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-semibold text-amber-700">{duplicateMatch.message}：{duplicateMatch.name}</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => onOpenExisting(duplicateMatch.id, "detail")} className="flex-1 rounded-lg border border-amber-200 bg-white py-2 text-xs text-amber-700">查看已有菜品</button>
+                  <button type="button" onClick={() => onOpenExisting(duplicateMatch.id, "edit")} className="flex-1 rounded-lg bg-amber-500 py-2 text-xs text-white">编辑已有菜品</button>
                 </div>
-              )}
-              <button onClick={handleSave} disabled={saving}
-                className="mt-4 w-full rounded-2xl bg-[var(--coral)] py-3.5 text-sm font-semibold text-white transition active:bg-[var(--coral-dark)] disabled:opacity-50">
-              {saving ? "保存中..." : dish ? "💾 保存修改" : "💾 保存到菜单库"}
-              </button>
-            </>
-          )}
+              </div>}
+              <button type="button" onClick={handleGenerateRecipe} disabled={!editName.trim() || generating} className="mt-2 w-full rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 disabled:opacity-40">{generating ? "正在生成..." : "✨ 根据菜名生成参考用料和做法"}</button>
+              {generateMessage && <p className="mt-2 text-xs text-amber-600">{generateMessage}</p>}
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-400">分类</label>
+              <select value={editCat} onChange={(event) => { setEditCat(event.target.value); setCategoryTouched(true); }} className="mt-1 w-full rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm outline-none">
+                {CATEGORIES.filter((category) => category.key !== "all").map((category) => <option key={category.key} value={category.key}>{category.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-400">食材清单（每行一个）</label>
+              <textarea value={editIngs} onChange={(event) => setEditIngs(event.target.value)} rows={4} placeholder={"例：\n排骨 500g\n生抽 2勺"} className="mt-1 w-full resize-none rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-400">做法步骤（每行一步）</label>
+              <textarea value={editSteps} onChange={(event) => setEditSteps(event.target.value)} rows={5} placeholder={"例：\n排骨焯水\n加调料炖熟"} className="mt-1 w-full resize-none rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm outline-none" />
+            </div>
+          </div>}
+
+          {saveError && <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">保存失败：{saveError}。你填写的内容仍保留，请稍后重试。</div>}
+          {canSave && <button type="button" onClick={handleSave} disabled={saving} className="mt-4 w-full rounded-2xl bg-[var(--coral)] py-3.5 text-sm font-semibold text-white disabled:opacity-50">
+            {saving ? "保存中..." : dish ? "💾 保存修改" : "💾 保存到饭盆"}
+          </button>}
         </div>
       </div>
+
+      {completionCandidate && <WishlistCompletionDialog candidate={completionCandidate} saving={saving} onChoose={(complete) => void chooseCompletion(complete)} onCancel={() => { if (!saving) setCompletionCandidate(null); }} />}
     </div>
   );
 }

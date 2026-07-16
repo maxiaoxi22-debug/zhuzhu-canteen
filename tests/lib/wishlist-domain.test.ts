@@ -45,6 +45,12 @@ describe("findPendingWishlistMatch", () => {
     })?.id).toBe("wish-fallback");
   });
 
+  it("uses the same punctuation-insensitive normalization as dish saving", () => {
+    expect(findPendingWishlistMatch(items, {
+      recipeId: null, name: "丸 子！", categoryKey: "肉类",
+    })?.id).toBe("wish-fallback");
+  });
+
   it("never matches a completed item", () => {
     expect(findPendingWishlistMatch(items, {
       recipeId: "recipe-completed", name: "完成菜", categoryKey: "肉类",

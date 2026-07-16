@@ -20,7 +20,7 @@ describe("四页应用外壳", () => {
     const detail = source("../../src/components/DishDetail.tsx");
     expect(form).toContain("handleRecognize");
     expect(form).toContain("handleGenerateRecipe");
-    expect(form).toContain("readDishSaveResult");
+    expect(form).toContain("saveDishOnce");
     expect(form).toContain("onOpenExisting");
     expect(detail).toContain("onEdit");
     expect(detail).toContain("addToPlan");

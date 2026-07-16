@@ -12,6 +12,7 @@ import DeleteDishDialog from "@/components/DeleteDishDialog";
 import WishlistPage from "@/components/WishlistPage";
 import RecipeDetail from "@/components/RecipeDetail";
 import CompletedWishlistPage from "@/components/CompletedWishlistPage";
+import WishlistCelebration, { type WishlistCelebrationData } from "@/components/WishlistCelebration";
 import { Dish, HistoryData } from "@/lib/types";
 
 export type Tab = "record" | "library" | "today" | "history";
@@ -43,6 +44,7 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [overlayView, setOverlayView] = useState<OverlayView>(null);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [wishlistCelebration, setWishlistCelebration] = useState<WishlistCelebrationData | null>(null);
 
   const fetchDishes = useCallback(async () => {
     setLoadError("");
@@ -186,12 +188,19 @@ export default function Home() {
           dishes={dishes}
           dish={editingDish || undefined}
           onClose={() => { setShowAddForm(false); setEditingDish(null); }}
-          onSaved={() => { setShowAddForm(false); setEditingDish(null); refresh(); }}
+          onSaved={(completion) => {
+            setShowAddForm(false);
+            setEditingDish(null);
+            if (completion) setWishlistCelebration(completion);
+            refresh();
+            void fetchWishlistCount();
+          }}
           onOpenExisting={openExisting}
         />
       )}
       {deleteTarget && <DeleteDishDialog dish={deleteTarget} deleting={deleting} error={deleteError} onCancel={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(""); } }} onConfirm={confirmDelete} />}
       {toast && <div className="fixed left-1/2 top-6 z-[60] -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">{toast}</div>}
+      {wishlistCelebration && <WishlistCelebration completion={wishlistCelebration} onClose={() => setWishlistCelebration(null)} />}
       </>}
       </div>
     </main>
