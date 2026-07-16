@@ -22,9 +22,11 @@ import {
   type CategoryKey,
   type Dish,
   type DishDuplicateMatch,
+  type RecipeSearchResult,
   type RecognitionResult,
 } from "@/lib/types";
 
+import RecipeDetail from "./RecipeDetail";
 import WishlistCompletionDialog, { type WishlistCompletionChoice } from "./WishlistCompletionDialog";
 
 interface PendingWishlistItem extends WishlistCompletionChoice {
@@ -39,6 +41,24 @@ type PendingWishlistResponseItem = Omit<PendingWishlistItem, "nameKey">;
 interface PendingCompletion {
   candidate: PendingWishlistItem;
   snapshot: PendingSaveSnapshot;
+}
+
+interface UploadedPhoto {
+  imageUrl: string;
+  cleanupToken: string;
+}
+
+async function cleanupUploadedPhoto(photo: UploadedPhoto): Promise<void> {
+  try {
+    await fetch("/api/uploads/dish-photo", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cleanupToken: photo.cleanupToken }),
+      keepalive: true,
+    });
+  } catch {
+    // Cleanup is best-effort and must never clear the local preview or form data.
+  }
 }
 
 function parseLines(value: string): string {
@@ -85,17 +105,30 @@ export default function AddDishForm({
   const [duplicateChecking, setDuplicateChecking] = useState(false);
   const [duplicateCheckError, setDuplicateCheckError] = useState("");
   const [pendingCompletion, setPendingCompletion] = useState<PendingCompletion | null>(null);
+  const [matchedRecipe, setMatchedRecipe] = useState<RecipeSearchResult | null>(null);
+  const [recipeMatching, setRecipeMatching] = useState(false);
+  const [recipeMatchMessage, setRecipeMatchMessage] = useState("");
+  const [openRecipeId, setOpenRecipeId] = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const uploadGuardRef = useRef(createLatestTaskGuard());
+  const recipeGuardRef = useRef(createLatestTaskGuard());
   const saveGuardRef = useRef(createLatestTaskGuard());
   const submissionInFlightRef = useRef(false);
+  const uploadedPhotoRef = useRef<UploadedPhoto | null>(null);
 
   const invalidatePendingSave = () => {
     saveGuardRef.current.begin();
     setPendingCompletion(null);
     if (!submissionInFlightRef.current) setSaving(false);
+  };
+
+  const invalidateRecipeMatch = () => {
+    recipeGuardRef.current.begin();
+    setMatchedRecipe(null);
+    setRecipeMatching(false);
+    setRecipeMatchMessage("");
   };
 
   const snapshotFor = (revision: number): PendingSaveSnapshot => createPendingSaveSnapshot(revision, {
@@ -105,10 +138,17 @@ export default function AddDishForm({
     imageUrl,
     ingredients: editIngs.split("\n").map((item) => item.trim()).filter(Boolean),
     steps: editSteps.split("\n").map((item) => item.trim()).filter(Boolean),
+    recipeId: matchedRecipe?.id ?? null,
   });
 
   useEffect(() => () => {
     saveGuardRef.current.begin();
+    recipeGuardRef.current.begin();
+    const photo = uploadedPhotoRef.current;
+    if (!submissionInFlightRef.current) {
+      uploadedPhotoRef.current = null;
+      if (photo) void cleanupUploadedPhoto(photo);
+    }
   }, []);
 
   useEffect(() => {
@@ -137,6 +177,10 @@ export default function AddDishForm({
 
   const handleFile = async (selectedFile: File) => {
     invalidatePendingSave();
+    invalidateRecipeMatch();
+    const replacedPhoto = uploadedPhotoRef.current;
+    uploadedPhotoRef.current = null;
+    if (replacedPhoto) void cleanupUploadedPhoto(replacedPhoto);
     const revision = uploadGuardRef.current.begin();
     setUploading(true);
     setFile(null);
@@ -161,10 +205,18 @@ export default function AddDishForm({
       const formData = new FormData();
       formData.append("image", optimized);
       const response = await fetch("/api/uploads/dish-photo", { method: "POST", body: formData });
-      const result = await response.json() as { imageUrl?: string; error?: string };
-      if (!uploadGuardRef.current.isCurrent(revision)) return;
+      const result = await response.json() as { imageUrl?: string; cleanupToken?: string; error?: string };
+      if (!uploadGuardRef.current.isCurrent(revision)) {
+        if (result.imageUrl && result.cleanupToken) {
+          void cleanupUploadedPhoto({ imageUrl: result.imageUrl, cleanupToken: result.cleanupToken });
+        }
+        return;
+      }
       if (!response.ok || !result.imageUrl) throw new Error(result.error || "照片上传失败");
       setImageUrl(result.imageUrl);
+      if (result.cleanupToken) {
+        uploadedPhotoRef.current = { imageUrl: result.imageUrl, cleanupToken: result.cleanupToken };
+      }
     } catch (error) {
       if (uploadGuardRef.current.isCurrent(revision)) {
         setUploadError(error instanceof Error ? error.message : "照片上传失败，请重试");
@@ -199,17 +251,42 @@ export default function AddDishForm({
     }
   };
 
-  const handleCandidateClick = (candidate: RecognitionResult["candidates"][number]) => {
+  const handleCandidateClick = async (candidate: RecognitionResult["candidates"][number]) => {
     invalidatePendingSave();
+    const recipeRevision = recipeGuardRef.current.begin();
+    const imageRevision = uploadGuardRef.current.current();
+    setMatchedRecipe(null);
+    setRecipeMatching(true);
+    setRecipeMatchMessage("");
     const next = applyRecognitionCandidate(editCat, categoryTouched, candidate);
     setEditName(next.name);
     setDuplicateMatch(null);
     setDuplicateCheckError("");
     setEditCat(next.category);
+    try {
+      const response = await fetch(`/api/recipes/search?q=${encodeURIComponent(candidate.name.trim())}`);
+      if (!response.ok) throw new Error("公共菜谱暂时不可用");
+      const data = await response.json() as { items?: RecipeSearchResult[] };
+      if (!recipeGuardRef.current.isCurrent(recipeRevision)
+        || !uploadGuardRef.current.isCurrent(imageRevision)) return;
+      const candidateKey = normalizeDishName(candidate.name);
+      const exact = (data.items ?? []).find((recipe) => normalizeDishName(recipe.name) === candidateKey) ?? null;
+      setMatchedRecipe(exact);
+      setRecipeMatchMessage(exact ? "" : "公共菜谱暂无同名菜谱，可继续手动保存");
+    } catch {
+      if (recipeGuardRef.current.isCurrent(recipeRevision)
+        && uploadGuardRef.current.isCurrent(imageRevision)) {
+        setRecipeMatchMessage("公共菜谱暂时无法匹配，可继续手动保存");
+      }
+    } finally {
+      if (recipeGuardRef.current.isCurrent(recipeRevision)
+        && uploadGuardRef.current.isCurrent(imageRevision)) setRecipeMatching(false);
+    }
   };
 
   const handleRecognize = async () => {
     if (!file || !imageUrl) return;
+    invalidateRecipeMatch();
     const recognitionRevision = uploadGuardRef.current.current();
     setAiLoading(true);
     setAiError("");
@@ -250,15 +327,24 @@ export default function AddDishForm({
         imageUrl: snapshot.imageUrl,
         ingredients: snapshot.ingredients,
         steps: snapshot.steps,
+        recipeId: snapshot.recipeId ?? undefined,
         ...completionFields,
       });
+      uploadedPhotoRef.current = null;
+      if (!saveGuardRef.current.isCurrent(snapshot.revision)) return;
       onSaved(result.wishlistCompletion);
     } catch (error) {
+      if (!saveGuardRef.current.isCurrent(snapshot.revision)) {
+        const photo = uploadedPhotoRef.current;
+        uploadedPhotoRef.current = null;
+        if (photo) void cleanupUploadedPhoto(photo);
+        return;
+      }
       if (error instanceof DishSaveError && error.match) setDuplicateMatch(error.match);
       setSaveError(error instanceof Error ? error.message : "保存失败，请重试");
     } finally {
       submissionInFlightRef.current = false;
-      setSaving(false);
+      if (saveGuardRef.current.isCurrent(snapshot.revision)) setSaving(false);
     }
   };
 
@@ -280,7 +366,7 @@ export default function AddDishForm({
       if (!saveGuardRef.current.isCurrent(snapshot.revision)) return;
       const items = (data.items || []).map((item) => ({ ...item, nameKey: normalizeDishName(item.name) }));
       const match = findPendingWishlistMatch(items, {
-        recipeId: null,
+        recipeId: snapshot.recipeId,
         name: snapshot.name,
         categoryKey: snapshot.categoryKey as CategoryKey,
       });
@@ -302,10 +388,18 @@ export default function AddDishForm({
     await handleSaveResponse(pending.snapshot, pending.candidate, completeWishlist);
   };
 
-  const canSave = Boolean(editName.trim() && imageUrl && !uploading && !duplicateMatch);
+  const closeForm = () => {
+    if (saving) return;
+    const photo = uploadedPhotoRef.current;
+    uploadedPhotoRef.current = null;
+    if (photo) void cleanupUploadedPhoto(photo);
+    onClose();
+  };
+
+  const canSave = Boolean(editName.trim() && imageUrl && !uploading && !recipeMatching && !duplicateMatch);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end bg-[#36251f57] backdrop-blur-[2px]" onClick={() => { if (!saving) onClose(); }}>
+    <div className="fixed inset-0 z-30 flex items-end bg-[#36251f57] backdrop-blur-[2px]" onClick={closeForm}>
       <div className="animate-slide-up max-h-[90%] w-full overflow-y-auto rounded-t-[1.8rem] bg-[var(--paper)] text-[var(--cocoa)]" onClick={(event) => event.stopPropagation()}>
         <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-gray-300" />
         <div className="p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
@@ -336,7 +430,7 @@ export default function AddDishForm({
               {recognitionCandidates.map((candidate) => <button key={`${candidate.name}-${candidate.category}`} type="button" disabled={saving} onClick={() => handleCandidateClick(candidate)} className="rounded-xl border border-[#f3c9bf] bg-white px-3 py-2.5 text-left text-sm disabled:opacity-50">
                 <span className="font-semibold">{candidate.name}</span><span className="ml-2 text-xs text-gray-400">{candidate.category}</span>
               </button>)}
-              <button type="button" disabled={saving} onClick={() => { setRecognitionCandidates([]); nameRef.current?.focus(); }} className="rounded-xl py-2 text-sm text-gray-500 disabled:opacity-50">都不对，手动输入</button>
+              <button type="button" disabled={saving} onClick={() => { invalidateRecipeMatch(); setRecognitionCandidates([]); nameRef.current?.focus(); }} className="rounded-xl py-2 text-sm text-gray-500 disabled:opacity-50">都不对，手动输入</button>
             </div>
           </section>}
 
@@ -348,7 +442,10 @@ export default function AddDishForm({
           {image && <div className="mt-4 space-y-3">
             <div>
               <label className="text-xs font-medium text-gray-400">菜品名称 *</label>
-              <input ref={nameRef} disabled={saving} value={editName} onChange={(event) => { invalidatePendingSave(); setEditName(event.target.value); setDuplicateMatch(null); setDuplicateCheckError(""); }} placeholder="例：红烧排骨" className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#ef68654d] disabled:opacity-60" />
+              <input ref={nameRef} disabled={saving} value={editName} onChange={(event) => { invalidatePendingSave(); invalidateRecipeMatch(); setEditName(event.target.value); setDuplicateMatch(null); setDuplicateCheckError(""); }} placeholder="例：红烧排骨" className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#ef68654d] disabled:opacity-60" />
+              {recipeMatching && <p className="mt-2 text-xs text-gray-400">正在匹配公共菜谱...</p>}
+              {matchedRecipe && <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-green-200 bg-green-50 p-3 text-xs text-green-700"><span>已匹配公共菜谱：{matchedRecipe.name}</span><button type="button" onClick={() => setOpenRecipeId(matchedRecipe.id)} className="min-h-9 rounded-lg bg-white px-3 font-semibold">查看公共菜谱</button></div>}
+              {recipeMatchMessage && <p className="mt-2 text-xs text-amber-600">{recipeMatchMessage}</p>}
               {duplicateChecking && <p className="mt-2 text-xs text-gray-400">正在检查菜单库...</p>}
               {duplicateCheckError && <p className="mt-2 text-xs text-amber-600">{duplicateCheckError}</p>}
               {duplicateMatch && <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
@@ -385,6 +482,7 @@ export default function AddDishForm({
       </div>
 
       {pendingCompletion && <WishlistCompletionDialog candidate={pendingCompletion.candidate} saving={saving} onChoose={(complete) => void chooseCompletion(complete)} onCancel={() => { if (!saving) setPendingCompletion(null); }} />}
+      {openRecipeId && <div className="fixed inset-0 z-40 overflow-y-auto bg-[var(--cream)]" onClick={(event) => event.stopPropagation()}><RecipeDetail recipeId={openRecipeId} onBack={() => setOpenRecipeId(null)} onWishlistChanged={() => {}} /></div>}
     </div>
   );
 }

@@ -47,6 +47,7 @@ export interface PendingSaveSnapshot {
   readonly imageUrl: string;
   readonly ingredients: readonly string[];
   readonly steps: readonly string[];
+  readonly recipeId: string | null;
 }
 
 export function createPendingSaveSnapshot(

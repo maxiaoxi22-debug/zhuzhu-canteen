@@ -54,6 +54,7 @@ describe("AddDishForm behavior", () => {
   let root: Root;
   let fetchMock: ReturnType<typeof vi.fn>;
   let onCloseSpy: Mock<() => void>;
+  let onSavedSpy: Mock<() => void>;
 
   beforeEach(async () => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -62,9 +63,10 @@ describe("AddDishForm behavior", () => {
     root = createRoot(container);
     fetchMock = vi.fn();
     onCloseSpy = vi.fn<() => void>();
+    onSavedSpy = vi.fn<() => void>();
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => {
-      root.render(<AddDishForm dishes={[]} onClose={onCloseSpy} onSaved={vi.fn()} onOpenExisting={vi.fn()} />);
+      root.render(<AddDishForm dishes={[]} onClose={onCloseSpy} onSaved={onSavedSpy} onOpenExisting={vi.fn()} />);
     });
   });
 
@@ -196,5 +198,216 @@ describe("AddDishForm behavior", () => {
     await flush();
     const dishCall = fetchMock.mock.calls.find(([url]) => url === "/api/dishes")!;
     expect(JSON.parse(dishCall[1].body).imageUrl).toBe("https://image.test/c.jpg");
+  });
+
+  it("links an exact normalized AI candidate to a public recipe and saves its recipeId without a wish", async () => {
+    await upload();
+    fetchMock.mockImplementation((input: string, init?: RequestInit) => {
+      if (input === "/api/recognize") return Promise.resolve(jsonResponse({
+        candidates: [{ name: "  木樨肉！", category: "肉类" }],
+        visibleIngredients: [], provider: "gemini", requestId: "recognize-1",
+      }));
+      if (input.startsWith("/api/recipes/search")) return Promise.resolve(jsonResponse({ items: [{
+        id: "recipe-1", name: "木樨肉", categoryKey: "肉类", description: null,
+        servings: null, estimatedTimeMinutes: null, imageUrl: null, isWishlisted: false, isCooked: false,
+      }] }));
+      if (input === "/api/recipes/recipe-1") return Promise.resolve(jsonResponse({
+        id: "recipe-1", name: "木樨肉", nameKey: "木樨肉", categoryKey: "肉类", description: null,
+        servings: null, estimatedTimeMinutes: null, imageUrl: null, isWishlisted: false, isCooked: false,
+        sourceName: "HowToCook", sourceUrl: "https://example.test", sourceLicense: "Unlicense",
+        sourcePath: "dishes/meat.md", sourceRevision: "rev", contentHash: "hash",
+        createdAt: "2026-07-17", updatedAt: "2026-07-17", ingredients: [], steps: [], aliases: [],
+      }));
+      if (input.startsWith("/api/dishes/check-name")) return Promise.resolve(jsonResponse({ match: null }));
+      if (input === "/api/wishlist?status=pending") return Promise.resolve(jsonResponse({ items: [] }));
+      if (input === "/api/dishes" && init?.method === "POST") return Promise.resolve(jsonResponse({ id: "dish-1" }));
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+
+    await act(async () => button(container, "AI 智能识别").click());
+    await flush();
+    await act(async () => button(container, "木樨肉").click());
+    await flush();
+
+    expect(container.textContent).toContain("已匹配公共菜谱：木樨肉");
+    await act(async () => button(container, "查看公共菜谱").click());
+    await flush();
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/recipes/recipe-1")).toBe(true);
+    await act(async () => (container.querySelector('button[aria-label="返回上一页"]') as HTMLButtonElement).click());
+    expect(onCloseSpy).not.toHaveBeenCalled();
+
+    await act(async () => button(container, "保存到饭盆").click());
+    await flush();
+    const dishCall = fetchMock.mock.calls.find(([url]) => url === "/api/dishes")!;
+    expect(JSON.parse(dishCall[1].body)).toMatchObject({ recipeId: "recipe-1", completeWishlist: false });
+  });
+
+  it("does not let an older recipe lookup attach to a newer AI candidate", async () => {
+    await upload();
+    const oldLookup = deferred<Response>();
+    fetchMock.mockImplementation((input: string) => {
+      if (input === "/api/recognize") return Promise.resolve(jsonResponse({
+        candidates: [{ name: "旧候选", category: "肉类" }, { name: "新候选", category: "青菜" }],
+        visibleIngredients: [], provider: "gemini", requestId: "recognize-2",
+      }));
+      if (input.includes("q=%E6%97%A7%E5%80%99%E9%80%89")) return oldLookup.promise;
+      if (input.includes("q=%E6%96%B0%E5%80%99%E9%80%89")) return Promise.resolve(jsonResponse({ items: [{
+        id: "recipe-new", name: "新候选", categoryKey: "青菜", description: null,
+        servings: null, estimatedTimeMinutes: null, imageUrl: null, isWishlisted: false, isCooked: false,
+      }] }));
+      if (input.startsWith("/api/dishes/check-name")) return Promise.resolve(jsonResponse({ match: null }));
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+
+    await act(async () => button(container, "AI 智能识别").click());
+    await flush();
+    await act(async () => button(container, "旧候选").click());
+    await act(async () => button(container, "新候选").click());
+    await flush();
+    oldLookup.resolve(jsonResponse({ items: [{
+      id: "recipe-old", name: "旧候选", categoryKey: "肉类", description: null,
+      servings: null, estimatedTimeMinutes: null, imageUrl: null, isWishlisted: false, isCooked: false,
+    }] }));
+    await flush();
+
+    expect(container.textContent).toContain("已匹配公共菜谱：新候选");
+    expect(container.textContent).not.toContain("已匹配公共菜谱：旧候选");
+  });
+
+  it("cleans exact unassociated uploads on replacement and close", async () => {
+    let uploadCount = 0;
+    const deletedTokens: string[] = [];
+    fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
+      if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
+        uploadCount += 1;
+        return jsonResponse({ imageUrl: `https://image.test/${uploadCount}.jpg`, cleanupToken: `token-${uploadCount}` });
+      }
+      if (input === "/api/uploads/dish-photo" && init?.method === "DELETE") {
+        deletedTokens.push(JSON.parse(String(init.body)).cleanupToken);
+        return jsonResponse({ success: true });
+      }
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => selectFile(fileInput, new File(["a"], "a.jpg", { type: "image/jpeg" })));
+    await flush();
+    await act(async () => selectFile(fileInput, new File(["b"], "b.jpg", { type: "image/jpeg" })));
+    await flush();
+    await act(async () => (container.firstElementChild as HTMLElement).click());
+    await flush();
+
+    expect(deletedTokens).toEqual(["token-1", "token-2"]);
+    expect(onCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans a stale upload that finishes after a newer photo", async () => {
+    const uploadA = deferred<Response>();
+    const uploadB = deferred<Response>();
+    let postCount = 0;
+    const deletedTokens: string[] = [];
+    fetchMock.mockImplementation((input: string, init?: RequestInit) => {
+      if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
+        postCount += 1;
+        return postCount === 1 ? uploadA.promise : uploadB.promise;
+      }
+      if (input === "/api/uploads/dish-photo" && init?.method === "DELETE") {
+        deletedTokens.push(JSON.parse(String(init.body)).cleanupToken);
+        return Promise.resolve(jsonResponse({ success: true }));
+      }
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => selectFile(fileInput, new File(["a"], "a.jpg", { type: "image/jpeg" })));
+    await act(async () => selectFile(fileInput, new File(["b"], "b.jpg", { type: "image/jpeg" })));
+    uploadB.resolve(jsonResponse({ imageUrl: "https://image.test/b.jpg", cleanupToken: "token-b" }));
+    await flush();
+    uploadA.resolve(jsonResponse({ imageUrl: "https://image.test/a.jpg", cleanupToken: "token-a" }));
+    await flush();
+
+    expect(deletedTokens).toEqual(["token-a"]);
+    await act(async () => (container.firstElementChild as HTMLElement).click());
+    await flush();
+    expect(deletedTokens).toEqual(["token-a", "token-b"]);
+  });
+
+  it("keeps a failed save photo locally and cleans it on close, but never deletes a successful save", async () => {
+    let saveSucceeds = false;
+    const deletedTokens: string[] = [];
+    fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
+      if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
+        return jsonResponse({ imageUrl: "https://image.test/owned.jpg", cleanupToken: "owned-token" });
+      }
+      if (input.startsWith("/api/dishes/check-name")) return jsonResponse({ match: null });
+      if (input === "/api/wishlist?status=pending") return jsonResponse({ items: [] });
+      if (input === "/api/dishes") return saveSucceeds
+        ? jsonResponse({ id: "dish-saved" })
+        : jsonResponse({ error: "事务失败" }, 500);
+      if (input === "/api/uploads/dish-photo" && init?.method === "DELETE") {
+        deletedTokens.push(JSON.parse(String(init.body)).cleanupToken);
+        return jsonResponse({ success: true });
+      }
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => selectFile(fileInput, new File(["a"], "a.jpg", { type: "image/jpeg" })));
+    await flush();
+    const nameInput = container.querySelector('input[placeholder="例：红烧排骨"]') as HTMLInputElement;
+    await act(async () => setInput(nameInput, "木樨肉"));
+    await act(async () => button(container, "保存到饭盆").click());
+    await flush();
+    expect(container.querySelector('img[alt="预览"]')).not.toBeNull();
+    expect(container.textContent).toContain("事务失败");
+    await act(async () => (container.firstElementChild as HTMLElement).click());
+    await flush();
+    expect(deletedTokens).toEqual(["owned-token"]);
+
+    deletedTokens.length = 0;
+    saveSucceeds = true;
+    await act(async () => {
+      root.unmount();
+      root = createRoot(container);
+      root.render(<AddDishForm dishes={[]} onClose={onCloseSpy} onSaved={onSavedSpy} onOpenExisting={vi.fn()} />);
+    });
+    const nextInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => selectFile(nextInput, new File(["b"], "b.jpg", { type: "image/jpeg" })));
+    await flush();
+    const nextName = container.querySelector('input[placeholder="例：红烧排骨"]') as HTMLInputElement;
+    await act(async () => setInput(nextName, "糖醋排骨"));
+    await act(async () => button(container, "保存到饭盆").click());
+    await flush();
+    await act(async () => (container.firstElementChild as HTMLElement).click());
+    await flush();
+    expect(deletedTokens).toEqual([]);
+  });
+
+  it("does not race cleanup against an in-flight save during unmount", async () => {
+    const dishSave = deferred<Response>();
+    const deletedTokens: string[] = [];
+    fetchMock.mockImplementation((input: string, init?: RequestInit) => {
+      if (input === "/api/uploads/dish-photo" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ imageUrl: "https://image.test/pending.jpg", cleanupToken: "pending-token" }));
+      }
+      if (input.startsWith("/api/dishes/check-name")) return Promise.resolve(jsonResponse({ match: null }));
+      if (input === "/api/wishlist?status=pending") return Promise.resolve(jsonResponse({ items: [] }));
+      if (input === "/api/dishes") return dishSave.promise;
+      if (input === "/api/uploads/dish-photo" && init?.method === "DELETE") {
+        deletedTokens.push(JSON.parse(String(init.body)).cleanupToken);
+        return Promise.resolve(jsonResponse({ success: true }));
+      }
+      throw new Error(`unexpected fetch: ${input}`);
+    });
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => selectFile(fileInput, new File(["a"], "a.jpg", { type: "image/jpeg" })));
+    await flush();
+    const nameInput = container.querySelector('input[placeholder="例：红烧排骨"]') as HTMLInputElement;
+    await act(async () => setInput(nameInput, "木樨肉"));
+    await act(async () => button(container, "保存到饭盆").click());
+    await flush();
+    await act(async () => root.unmount());
+
+    expect(deletedTokens).toEqual([]);
+    dishSave.resolve(jsonResponse({ id: "dish-saved" }));
+    await flush();
+    expect(onSavedSpy).not.toHaveBeenCalled();
   });
 });

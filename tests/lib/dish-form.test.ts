@@ -4,6 +4,7 @@ import {
   buildWishlistCompletionFields,
   categoryIdFromKey,
   createLatestTaskGuard,
+  createPendingSaveSnapshot,
   readDishSaveResult,
   saveDishOnce,
 } from "../../src/lib/dish-form";
@@ -88,6 +89,21 @@ describe("菜品表单数据处理", () => {
     guard.begin();
 
     expect(guard.isCurrent(recognitionRevision)).toBe(false);
+  });
+
+  it("把菜谱关联复制进不可变保存快照", () => {
+    const snapshot = createPendingSaveSnapshot(3, {
+      name: "木樨肉",
+      categoryId: 1,
+      categoryKey: "肉类",
+      imageUrl: "dish.jpg",
+      ingredients: ["鸡蛋"],
+      steps: ["炒熟"],
+      recipeId: "recipe-1",
+    });
+
+    expect(snapshot.recipeId).toBe("recipe-1");
+    expect(Object.isFrozen(snapshot)).toBe(true);
   });
 
   it("两种心愿确认选择生成明确且互斥的服务端字段", () => {
