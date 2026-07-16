@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
 import { buildRecommendationPool } from "../../src/lib/recommendations";
+import { createRecommendationHandler } from "../../src/app/api/recommendations/route";
 import type { Dish, WishlistRecommendationInput } from "../../src/lib/types";
 
 const now = "2026-07-17T00:00:00.000Z";
@@ -95,5 +96,56 @@ describe("buildRecommendationPool", () => {
       [wish({ id: "completed", status: "completed" }), wish({ id: "vegetable", categoryKey: "青菜" })],
       "青菜",
     )).toMatchObject([{ source: "wishlist", wishlistItemId: "vegetable" }]);
+  });
+});
+
+describe("GET /api/recommendations partial degradation", () => {
+  const request = new Request("http://localhost/api/recommendations?category=all");
+  const database = {} as Parameters<typeof createRecommendationHandler>[0];
+
+  it("returns wishlist recommendations and a non-blocking warning when dishes fail", async () => {
+    const GET = createRecommendationHandler(database, {
+      loadDishes: vi.fn().mockRejectedValue(new Error("dishes unavailable")),
+      loadWishlist: vi.fn().mockResolvedValue({
+        items: [wish({ recipeId: "recipe-wish", name: "糖醋排骨" })],
+        pendingCount: 1,
+        completedCount: 0,
+      }),
+    });
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      items: [expect.objectContaining({ source: "wishlist", name: "糖醋排骨" })],
+      warnings: [{ source: "dishes", message: "饭盆菜品暂时读取失败，已展示心愿单推荐" }],
+    });
+  });
+
+  it("returns dish recommendations and a non-blocking warning when wishlist fails", async () => {
+    const GET = createRecommendationHandler(database, {
+      loadDishes: vi.fn().mockResolvedValue([dish({ recipeId: "recipe-dish", name: "木樨肉" })]),
+      loadWishlist: vi.fn().mockRejectedValue(new Error("wishlist unavailable")),
+    });
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      items: [expect.objectContaining({ source: "dish", name: "木樨肉" })],
+      warnings: [{ source: "wishlist", message: "心愿单暂时读取失败，已展示饭盆推荐" }],
+    });
+  });
+
+  it("returns a service error when both recommendation sources fail", async () => {
+    const GET = createRecommendationHandler(database, {
+      loadDishes: vi.fn().mockRejectedValue(new Error("dishes unavailable")),
+      loadWishlist: vi.fn().mockRejectedValue(new Error("wishlist unavailable")),
+    });
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "推荐服务暂时不可用，请稍后重试" });
   });
 });

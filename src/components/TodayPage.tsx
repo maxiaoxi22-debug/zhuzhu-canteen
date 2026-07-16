@@ -44,13 +44,24 @@ export default function TodayPage({
   const [todayPlans, setTodayPlans] = useState<MealPlan[]>([]);
   const [adding, setAdding] = useState("");
   const [message, setMessage] = useState("");
+  const [recommendationWarning, setRecommendationWarning] = useState("");
 
   const fetchRecommendations = useCallback(async () => {
     try {
       const response = await fetch(`/api/recommendations?category=${encodeURIComponent(randCat)}`);
       if (!response.ok) throw new Error("推荐读取失败，请重试");
-      const data = await response.json() as { items?: RecommendationItem[] };
+      const data = await response.json() as {
+        items?: RecommendationItem[];
+        warnings?: unknown;
+      };
       const items = data.items ?? [];
+      const warningMessages = Array.isArray(data.warnings)
+        ? data.warnings.flatMap((warning) => {
+            if (!warning || typeof warning !== "object" || !("message" in warning)) return [];
+            return typeof warning.message === "string" ? [warning.message] : [];
+          })
+        : [];
+      setRecommendationWarning(warningMessages.join("；"));
       setPool(items);
       setRecommendation((current) => {
         if (!items.length) return null;
@@ -58,6 +69,7 @@ export default function TodayPage({
           ?? items[Math.floor(Math.random() * items.length)];
       });
     } catch (error) {
+      setRecommendationWarning("");
       setPool([]);
       setRecommendation(null);
       setMessage(error instanceof Error ? error.message : "推荐读取失败，请重试");
@@ -186,6 +198,7 @@ export default function TodayPage({
       </div>
 
       {message && <p role="status" className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-center text-xs text-[#806d67]">{message}</p>}
+      {recommendationWarning && <p role="status" className="mt-2 rounded-xl bg-[#fff8e8] px-3 py-2 text-center text-xs text-[#806d67]">{recommendationWarning}</p>}
 
       <div className="section-head"><h2>今日菜单</h2><span>实时保存到家庭菜单</span></div>
       <div className="grid gap-2.5">
