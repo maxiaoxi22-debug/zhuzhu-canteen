@@ -95,6 +95,40 @@ describe("recipe read handlers", () => {
     });
   });
 
+  it("falls back across different recipe ids with the same normalized name and category", async () => {
+    await client.executeMultiple(`
+      INSERT INTO recipes VALUES (
+        'recipe-same-a','同名菜','同名菜','肉类',NULL,NULL,NULL,
+        'HowToCook','https://example.test/same-a','MIT','dishes/meat_dish/同名菜-a.md','revision-1',
+        'hash-same-a',NULL,'2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
+      );
+      INSERT INTO recipes VALUES (
+        'recipe-same-b','同名菜','同名菜','肉类',NULL,NULL,NULL,
+        'HowToCook','https://example.test/same-b','MIT','dishes/meat_dish/同名菜-b.md','revision-1',
+        'hash-same-b',NULL,'2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
+      );
+      INSERT INTO wishlist_items VALUES (
+        'wish-same-b',NULL,'recipe-same-b',NULL,'同名菜','肉类','pending',
+        '2026-07-17T00:00:00.000Z',NULL,NULL,
+        '2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z'
+      );
+      INSERT INTO dishes
+        (id,name,name_key,category_id,image_url,ingredients,steps,recipe_id,wishlist_item_id,owner_id,times_cooked,created_at,updated_at) VALUES
+        ('dish-same-b','同名菜','同名菜',1,NULL,'[]','[]','recipe-same-b',NULL,NULL,1,
+         '2026-07-17T00:00:00.000Z','2026-07-17T00:00:00.000Z');
+    `);
+
+    const response = await searchHandler(new Request("http://local.test/api/recipes/search?q=%E5%90%8C%E5%90%8D%E8%8F%9C"));
+    const body = await response.json() as {
+      items: Array<{ id: string; isWishlisted: boolean; isCooked: boolean }>;
+    };
+
+    expect(body.items.find(({ id }) => id === "recipe-same-a")).toMatchObject({
+      isWishlisted: true,
+      isCooked: true,
+    });
+  });
+
   it("orders equal-rank matches by name and caps results at 30", async () => {
     for (let index = 31; index >= 1; index -= 1) {
       const suffix = String(index).padStart(2, "0");

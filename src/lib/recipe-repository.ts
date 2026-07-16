@@ -56,11 +56,11 @@ async function loadRecipeStatuses(
   for (const candidate of candidates) {
     const isWishlisted = pendingItems.some((item) =>
       item.recipeId === candidate.id
-      || (item.recipeId === null && item.nameKey === candidate.nameKey && item.categoryKey === candidate.categoryKey));
+      || (item.nameKey === candidate.nameKey && item.categoryKey === candidate.categoryKey));
     const categoryId = CATEGORY_ID_BY_KEY[candidate.categoryKey];
     const isCooked = existingDishes.some((dish) =>
       dish.recipeId === candidate.id
-      || (dish.recipeId === null && dish.nameKey === candidate.nameKey && dish.categoryId === categoryId));
+      || (dish.nameKey === candidate.nameKey && dish.categoryId === categoryId));
     statusById.set(candidate.id, { isWishlisted, isCooked });
   }
   return statusById;
