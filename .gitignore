@@ -6,8 +6,17 @@ node_modules
 drizzle
 .vercel
 .env*
+!.env.example
 .worktrees
 .superpowers
 backups/
 .cache/
 *.tsbuildinfo
+
+# Local vision evaluation inputs and results may contain private family photos.
+data/vision/input/
+data/vision/**/*.jpg
+data/vision/**/*.jpeg
+data/vision/**/*.png
+data/vision/**/*.jsonl
+data/vision/expected.json
