@@ -24,10 +24,12 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ```bash
 brew install ollama
-ollama serve
+brew services start ollama
 ollama pull qwen3-vl:4b-instruct-q4_K_M
 ollama run qwen3-vl:4b-instruct-q4_K_M
 ```
+
+如果不希望注册后台服务，可在一个单独终端运行 `ollama serve`，再回到原终端执行 `ollama pull` 和 `ollama run`。
 
 在 `.env.local` 中配置：
 
